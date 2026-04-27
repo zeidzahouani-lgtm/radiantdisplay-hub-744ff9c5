@@ -1184,17 +1184,6 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     conn.end();
     const url = enableHttps ? `https://${body.host}:${httpsPort}` : `http://${body.host}:${appPort}`;
     await log(`🚀 Deployment complete — accessible at ${url}`);
-    await log("");
-    await log("════════════════════════════════════════════════════════════");
-    await log("🔐  COMPTE ADMINISTRATEUR PAR DÉFAUT");
-    await log("════════════════════════════════════════════════════════════");
-    await log(`   URL de connexion : ${url}/login`);
-    await log(`   Email            : ${DEFAULT_ADMIN_EMAIL}`);
-    await log(`   Mot de passe     : ${DEFAULT_ADMIN_PASSWORD}`);
-    await log(`   Rôle             : admin (global)`);
-    await log("   ⚠  Pensez à changer ce mot de passe après la 1ʳᵉ connexion.");
-    await log("════════════════════════════════════════════════════════════");
-    await log("");
 
     (globalThis as any).__lastDeployResult = {
       url,
