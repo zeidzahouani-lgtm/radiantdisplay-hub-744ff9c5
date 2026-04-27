@@ -48,15 +48,14 @@ export default function FirstAdminLogin() {
     setBackendStatus("checking");
     setBackendMessage("");
     try {
-      const [adminCheck, restoreCheck] = await Promise.all([
-        supabase.functions.invoke("bootstrap-admin", { body: { action: "check" } }),
-        supabase.functions.invoke("restore-backup", { body: { tables: {}, mode: "upsert" } }),
-      ]);
-
+      const adminCheck = await supabase.functions.invoke("bootstrap-admin", { body: { action: "check" } });
       if (adminCheck.error) throw adminCheck.error;
-      if (restoreCheck.error) throw restoreCheck.error;
-
-      setHasAdmin(Boolean(adminCheck.data?.has_admin));
+      const adminExists = Boolean(adminCheck.data?.has_admin);
+      setHasAdmin(adminExists);
+      if (!adminExists) {
+        const restoreCheck = await supabase.functions.invoke("restore-backup", { body: { tables: {}, mode: "upsert" } });
+        if (restoreCheck.error) throw restoreCheck.error;
+      }
       setBackendStatus("ready");
     } catch (e: any) {
       console.error(e);
@@ -113,10 +112,12 @@ export default function FirstAdminLogin() {
 
       // 2. Promote to admin via the bootstrap edge function
       const { data: promo, error: promoErr } = await supabase.functions.invoke("bootstrap-admin", {
-        body: { action: "promote", user_id: userId, email: email.trim() },
+        body: { action: "promote", email: email.trim() },
       });
       if (promoErr) throw promoErr;
       if (promo?.error) throw new Error(promo.error);
+      userId = promo?.user_id || userId;
+      if (!userId) throw new Error("Utilisateur administrateur introuvable.");
 
       const { error: finalSignInErr } = await supabase.auth.signInWithPassword({
         email: email.trim(),
