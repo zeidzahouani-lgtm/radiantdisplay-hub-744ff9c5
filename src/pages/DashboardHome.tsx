@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Link, Navigate } from "react-router-dom";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { EstablishmentDashboard } from "@/components/establishments/EstablishmentDashboard";
+import { FirstLaunchSetup } from "@/components/FirstLaunchSetup";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip,
@@ -57,6 +58,10 @@ function AdminDashboardContent() {
         </div>
       </div>
     );
+  }
+
+  if (isGlobalAdmin && !currentEstablishmentId && stats.totalScreens === 0) {
+    return <FirstLaunchSetup />;
   }
 
   const healthScore = stats.totalScreens > 0
