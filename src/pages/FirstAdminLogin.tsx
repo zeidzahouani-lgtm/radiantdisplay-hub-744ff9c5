@@ -155,23 +155,39 @@ export default function FirstAdminLogin() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-2xl">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
             <ShieldCheck className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle>Première connexion admin</CardTitle>
+          <Badge variant="outline" className="mx-auto gap-1.5">
+            <DatabaseZap className="h-3.5 w-3.5" /> Premier lancement
+          </Badge>
+          <CardTitle>Initialiser l'application</CardTitle>
           <CardDescription>
-            Créez le tout premier compte administrateur de cette instance.
+            Vérification backend, création du premier admin, puis création du premier établissement et écran.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {checking ? (
+          {checking || backendStatus === "checking" ? (
             <div className="flex items-center justify-center py-6 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Vérification…
+              Vérification de bootstrap-admin et restore-backup…
             </div>
+          ) : backendStatus === "blocked" ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Backend non joignable</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>L'étape admin est bloquée car les fonctions bootstrap-admin/restore-backup ne répondent pas.</p>
+                <p className="text-xs">Consigne : relancez le déploiement SSH ou vérifiez que la route /functions/v1/ est bien proxyfiée vers le backend local, puis réessayez.</p>
+                {backendMessage && <p className="text-xs opacity-90">Détail : {backendMessage}</p>}
+                <Button type="button" variant="secondary" onClick={() => void checkBackend()} className="w-full gap-2">
+                  <RefreshCw className="h-4 w-4" /> Revérifier
+                </Button>
+              </AlertDescription>
+            </Alert>
           ) : hasAdmin ? (
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
@@ -188,55 +204,67 @@ export default function FirstAdminLogin() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  Cette page se désactive automatiquement dès qu'un admin existe.
+                  Ce wizard s'affiche uniquement au premier lancement et se désactive automatiquement dès qu'un admin existe.
                 </AlertDescription>
               </Alert>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email administrateur</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="username"
-                    placeholder="admin@exemple.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={submitting}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">Mot de passe</Label>
-                  <div className="relative">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email administrateur</Label>
                     <Input
-                      id="password"
-                      type={showPwd ? "text" : "password"}
-                      autoComplete="new-password"
-                      placeholder="Min. 8 caractères"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      id="email"
+                      type="email"
+                      autoComplete="username"
+                      placeholder="admin@exemple.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       disabled={submitting}
                       required
-                      minLength={8}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPwd((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      tabIndex={-1}
-                    >
-                      {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Mot de passe</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPwd ? "text" : "password"}
+                        autoComplete="new-password"
+                        placeholder="Min. 8 caractères"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        disabled={submitting}
+                        required
+                        minLength={8}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPwd((v) => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        tabIndex={-1}
+                      >
+                        {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="organization">Premier établissement</Label>
+                    <Input id="organization" value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} disabled={submitting} required />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="screen">Premier écran</Label>
+                    <Input id="screen" value={screenName} onChange={(e) => setScreenName(e.target.value)} disabled={submitting} required />
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={submitting}>
+                <Button type="submit" className="w-full gap-2" disabled={!canSubmit}>
                   {submitting ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Création…</>
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Initialisation…</>
                   ) : (
-                    "Créer le compte admin"
+                    <><Building2 className="h-4 w-4" /> Créer l'admin et le premier établissement</>
                   )}
                 </Button>
               </form>
