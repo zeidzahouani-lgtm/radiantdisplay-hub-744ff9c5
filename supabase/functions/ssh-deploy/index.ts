@@ -1081,6 +1081,13 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx","-g","daemon off;"]
 `;
+      const localFunctions = [
+        "bootstrap-admin", "restore-backup", "ai-assistant", "check-email-replies", "check-inbox",
+        "content-action", "content-webhook", "generate-devis", "invite-user", "resend-ack",
+        "screen-setup-guide", "send-credentials", "server-stats", "sync-client-dravox", "test-email",
+      ];
+      const localFunctionLocations = localFunctions.map((name) => `  location = /functions/v1/${name} { proxy_pass http://host.docker.internal:${supaKongPort}/functions/v1/${name}; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto ${enableHttps ? "https" : "http"}; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }`).join("\n");
+
       const nginxConf = enableHttps
         ? `server {
   listen 80;
@@ -1100,6 +1107,7 @@ server {
   location /rest/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/rest/v1/; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
   location /storage/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/storage/v1/; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
   location /realtime/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/realtime/v1/; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto https; }
+${localFunctionLocations}
   location / { try_files $uri $uri/ /index.html; }
   location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
 }
@@ -1113,6 +1121,7 @@ server {
   location /rest/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/rest/v1/; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto http; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
   location /storage/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/storage/v1/; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto http; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
   location /realtime/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/realtime/v1/; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto http; }
+${localFunctionLocations}
   location / { try_files $uri $uri/ /index.html; }
   location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
 }
