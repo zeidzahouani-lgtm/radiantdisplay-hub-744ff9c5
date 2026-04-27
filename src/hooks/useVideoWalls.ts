@@ -20,9 +20,6 @@ export function useVideoWalls() {
 
   const createWall = useMutation({
     mutationFn: async ({ name, rows, cols, mediaId, playlistId }: { name: string; rows: number; cols: number; mediaId?: string | null; playlistId?: string | null }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-
       // Quota check
       if (currentEstablishmentId) {
         const { data: est } = await supabase
@@ -44,7 +41,7 @@ export function useVideoWalls() {
       // Create the wall
       const { data: wall, error: wallErr } = await (supabase as any)
         .from("video_walls")
-        .insert({ name, rows, cols, user_id: user.id, establishment_id: currentEstablishmentId })
+        .insert({ name, rows, cols, user_id: null, establishment_id: currentEstablishmentId })
         .select()
         .single();
       if (wallErr) throw wallErr;
@@ -58,7 +55,7 @@ export function useVideoWalls() {
           screens.push({
             name: screenName,
             slug,
-            user_id: user.id,
+            user_id: null,
             establishment_id: currentEstablishmentId,
             wall_id: wall.id,
             wall_row: r,
