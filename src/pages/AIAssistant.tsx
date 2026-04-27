@@ -46,14 +46,12 @@ function GenerateTab() {
       const { error: uploadError } = await supabase.storage.from("media").upload(fileName, blob, { contentType: "image/png" });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
       const insertData: any = {
         name: prompt.slice(0, 50) || "Image IA",
         type: "image",
         url: urlData.publicUrl,
         duration: 10,
-        user_id: user.id,
+        user_id: null,
       };
       if (currentEstablishmentId) {
         insertData.establishment_id = currentEstablishmentId;
@@ -147,14 +145,12 @@ function EnhanceTab() {
       const { error: uploadError } = await supabase.storage.from("media").upload(fileName, blob, { contentType: "image/png" });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(fileName);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
       const insertData: any = {
         name: `Image améliorée ${new Date().toLocaleDateString("fr")}`,
         type: "image",
         url: urlData.publicUrl,
         duration: 10,
-        user_id: user.id,
+        user_id: null,
       };
       if (currentEstablishmentId) {
         insertData.establishment_id = currentEstablishmentId;
