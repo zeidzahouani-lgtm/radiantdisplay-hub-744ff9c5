@@ -956,16 +956,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log(`  • DB:     postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
         log(`  ⚠ Notez le mot de passe du dashboard, il ne sera pas réaffiché.`);
 
-        // ===== Create default global admin account (screenflow / 260390DS) =====
-        log("→ Création/réparation du compte admin par défaut (screenflow@screenflow.local)…");
-        // Wait for Postgres to be ready and ensure psql runs as the DB container user.
-        await ensurePostgresSqlAccess(conn, supaDir, log);
-
-        await upsertDefaultAdminViaAuthApi(conn, supaDir, supaKongPort, serviceKey, DEFAULT_ADMIN_PASSWORD, log);
-
-        // ===== Apply app migrations from cloned repo, then promote admin role =====
+        // ===== Apply app migrations from cloned repo =====
         // Note: we apply this AFTER the repo is cloned below. We schedule it via a marker.
-        (globalThis as any).__pendingAdminPromotion = { supaDir, postgresPw: postgresPw };
+        (globalThis as any).__pendingLocalMigrations = { supaDir, postgresPw: postgresPw };
       }
 
       // ===== Existing Supabase: extract keys from existing .env and ensure containers are up =====
@@ -995,10 +988,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         supabaseAnonOverride = anonKey;
         supabaseProjectIdOverride = "local";
         await log("✓ Supabase local opérationnel (clés réutilisées depuis .env)");
-        // Ensure admin still exists / re-sync password
-        await ensurePostgresSqlAccess(conn, supaDir, log);
-        await upsertDefaultAdminViaAuthApi(conn, supaDir, supaKongPort, serviceKey, DEFAULT_ADMIN_PASSWORD, log);
-        (globalThis as any).__pendingAdminPromotion = { supaDir, postgresPw };
+        (globalThis as any).__pendingLocalMigrations = { supaDir, postgresPw };
       }
 
       log(`→ Preparing remote directory ${remoteDir}…`);
@@ -1039,8 +1029,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log("✓ Repo cloned");
       }
 
-      // ===== Apply app migrations to local Supabase, then promote admin =====
-      const pending = (globalThis as any).__pendingAdminPromotion;
+      // ===== Apply app migrations to local Supabase =====
+      const pending = (globalThis as any).__pendingLocalMigrations;
       if (pending?.supaDir) {
         await ensurePostgresSqlAccess(conn, pending.supaDir, log);
         log("→ Application des migrations de l'application sur Supabase local…");
@@ -1067,24 +1057,6 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         }
         log(applyMig.stdout.slice(-1500));
         log("✓ Migrations appliquées (les erreurs 'already exists' sont normales)");
-
-        log("→ Promotion du compte screenflow en admin global…");
-        await ensurePostgresSqlAccess(conn, pending.supaDir, log);
-        await ensureDefaultAdminRole(conn, pending.supaDir, log);
-
-        await log("→ Test réel du login admin local…");
-        const internalSupaUrl = `http://127.0.0.1:${supaKongPort}`;
-        await ensureLocalAuthGateway(conn, pending.supaDir, supaKongPort, log);
-        await verifyAuthLoginFromServer(
-          conn,
-          internalSupaUrl,
-          supabaseAnonOverride,
-          DEFAULT_ADMIN_EMAIL,
-          DEFAULT_ADMIN_PASSWORD,
-          log,
-          buildDirectKongAuthLoginCommand(pending.supaDir, supabaseAnonOverride, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD),
-        );
-        await verifyPublicAuthLogin(supabaseUrlOverride, supabaseAnonOverride, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD, log);
       }
 
 
@@ -1212,17 +1184,6 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     conn.end();
     const url = enableHttps ? `https://${body.host}:${httpsPort}` : `http://${body.host}:${appPort}`;
     await log(`🚀 Deployment complete — accessible at ${url}`);
-    await log("");
-    await log("════════════════════════════════════════════════════════════");
-    await log("🔐  COMPTE ADMINISTRATEUR PAR DÉFAUT");
-    await log("════════════════════════════════════════════════════════════");
-    await log(`   URL de connexion : ${url}/login`);
-    await log(`   Email            : ${DEFAULT_ADMIN_EMAIL}`);
-    await log(`   Mot de passe     : ${DEFAULT_ADMIN_PASSWORD}`);
-    await log(`   Rôle             : admin (global)`);
-    await log("   ⚠  Pensez à changer ce mot de passe après la 1ʳᵉ connexion.");
-    await log("════════════════════════════════════════════════════════════");
-    await log("");
 
     (globalThis as any).__lastDeployResult = {
       url,
