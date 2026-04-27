@@ -4,8 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useAutoLogout } from "@/hooks/useAutoLogout";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -48,18 +46,11 @@ const FirstAdminLogin = lazy(() => import("./pages/FirstAdminLogin"));
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  useAutoLogout();
-  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Chargement...</div></div>;
-  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
-  return <>{children}</>;
+  return <Navigate to="/" replace />;
 }
 
 function AppSettingsProvider({ children }: { children: React.ReactNode }) {
@@ -79,13 +70,13 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
               <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/forgot-password" element={<Navigate to="/" replace />} />
               <Route path="/manual" element={<PublicManual />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/reset-password" element={<Navigate to="/" replace />} />
               <Route path="/player/:id" element={<Player />} />
               <Route path="/upload/:id" element={<UploadPage />} />
               <Route path="/assign-license/:screenId" element={<ProtectedRoute><AssignLicense /></ProtectedRoute>} />
-              <Route path="/admin/first-login" element={<FirstAdminLogin />} />
+              <Route path="/admin/first-login" element={<Navigate to="/" replace />} />
 
               <Route element={<ProtectedRoute><EstablishmentProvider><DashboardLayout /></EstablishmentProvider></ProtectedRoute>}>
                 <Route path="/" element={<DashboardHome />} />

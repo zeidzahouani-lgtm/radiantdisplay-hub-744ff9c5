@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 
 interface EstablishmentForm {
   name: string;
@@ -14,11 +13,9 @@ interface EstablishmentForm {
 
 export function useEstablishments() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   const { data: establishments = [], isLoading } = useQuery({
     queryKey: ["establishments"],
-    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("establishments")
@@ -33,7 +30,7 @@ export function useEstablishments() {
     mutationFn: async (form: EstablishmentForm) => {
       const { error } = await supabase
         .from("establishments")
-        .insert({ ...form, created_by: user!.id } as any);
+        .insert({ ...form, created_by: null } as any);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["establishments"] }),

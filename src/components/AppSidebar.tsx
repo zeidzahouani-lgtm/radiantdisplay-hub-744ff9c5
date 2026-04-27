@@ -1,7 +1,6 @@
-import { Tv, Image, ListMusic, Clock, LayoutDashboard, LogOut, User, LayoutGrid, Users, Building2, Settings, Palette, Key, Sparkles, Mail, AtSign, ClipboardList, BookOpen, BarChart3, DatabaseBackup, Activity, ShieldCheck } from "lucide-react";
+import { Tv, Image, ListMusic, Clock, LayoutDashboard, LayoutGrid, Users, Building2, Settings, Palette, Key, Sparkles, Mail, AtSign, ClipboardList, BookOpen, BarChart3, DatabaseBackup, Activity } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { useEstablishmentSettings } from "@/hooks/useEstablishmentSettings";
@@ -22,7 +21,6 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import { MonitorPlay } from "lucide-react";
 
 const mainItems = [
@@ -50,17 +48,14 @@ const globalAdminItems = [
   { title: "Établissements", url: "/admin/establishments", icon: Building2 },
   { title: "Licences", url: "/admin/licenses", icon: Key },
   { title: "Statistiques", url: "/admin/stats", icon: BarChart3 },
-  { title: "Demandes", url: "/admin/requests", icon: ClipboardList },
   { title: "Backup & Docker", url: "/admin/backup", icon: DatabaseBackup },
   { title: "État Serveur", url: "/admin/server-status", icon: Activity },
-  { title: "Première connexion admin", url: "/admin/first-login", icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { user, signOut } = useAuth();
   const { settings } = useAppSettings();
   const { isGlobalAdmin, isEstablishmentAdmin, isMarketing, currentEstablishmentId, memberships } = useEstablishmentContext();
   const { getSetting } = useEstablishmentSettings(currentEstablishmentId);
@@ -188,18 +183,11 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-3">
-        {!collapsed && user && (
-          <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground truncate mb-2 rounded-lg bg-secondary/30">
-            <div className="h-6 w-6 rounded-full gradient-primary flex items-center justify-center shrink-0">
-              <User className="h-3 w-3 text-white" />
-            </div>
-            <span className="truncate text-[11px]">{user.email}</span>
+        {!collapsed && (
+          <div className="px-2 py-1.5 text-[11px] text-muted-foreground rounded-lg bg-secondary/30">
+            Mode local public
           </div>
         )}
-        <Button variant="ghost" size={collapsed ? "icon" : "sm"} onClick={signOut} className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl">
-          <LogOut className="h-4 w-4" />
-          {!collapsed && "Déconnexion"}
-        </Button>
       </SidebarFooter>
     </Sidebar>
   );

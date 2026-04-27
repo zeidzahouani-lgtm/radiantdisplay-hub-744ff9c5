@@ -27,6 +27,10 @@ const MEDIA_TYPE_COLORS: Record<string, string> = {
 export default function DashboardHome() {
   const { isGlobalAdmin, currentEstablishmentId, memberships, isLoading: ctxLoading } = useEstablishmentContext();
 
+  if (!ctxLoading && memberships.length === 0) {
+    return <FirstLaunchSetup />;
+  }
+
   // Non-global-admin with an establishment: show establishment dashboard
   if (!ctxLoading && !isGlobalAdmin && currentEstablishmentId) {
     return (

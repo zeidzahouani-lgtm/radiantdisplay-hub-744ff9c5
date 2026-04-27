@@ -51,9 +51,6 @@ export function useLicenses() {
 
   const createLicense = useMutation({
     mutationFn: async ({ screenId, durationDays, establishmentId }: { screenId?: string; durationDays: number; establishmentId?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-
       const validUntil = new Date();
       validUntil.setDate(validUntil.getDate() + durationDays);
 
@@ -62,7 +59,7 @@ export function useLicenses() {
         .insert({
           license_key: generateLicenseKey(),
           screen_id: screenId || null,
-          created_by: user.id,
+          created_by: null,
           valid_until: validUntil.toISOString(),
           is_active: true,
           establishment_id: establishmentId || null,
