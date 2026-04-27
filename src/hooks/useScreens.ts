@@ -42,9 +42,6 @@ export function useScreens() {
 
   const addScreen = useMutation({
     mutationFn: async (name: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
       // Check screen quota if linked to an establishment
       if (currentEstablishmentId) {
         const { data: establishment } = await supabase
@@ -68,7 +65,7 @@ export function useScreens() {
       const { error } = await supabase.from("screens").insert({
         name,
         slug,
-        user_id: user.id,
+        user_id: null,
         establishment_id: currentEstablishmentId,
       } as any);
       if (error) throw error;
