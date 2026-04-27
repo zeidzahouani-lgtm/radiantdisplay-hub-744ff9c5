@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { toast } from "sonner";
 
@@ -27,7 +26,6 @@ function buildPlayerUrl(slugOrId: string) {
 }
 
 export function FirstLaunchSetup() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { setCurrentEstablishmentId } = useEstablishmentContext();
   const [organizationName, setOrganizationName] = useState("Mon organisation");
@@ -45,7 +43,7 @@ export function FirstLaunchSetup() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!user || !canSubmit) return;
+    if (!canSubmit) return;
 
     setSubmitting(true);
     try {
@@ -55,18 +53,14 @@ export function FirstLaunchSetup() {
 
       const { data: establishment, error: establishmentError } = await supabase
         .from("establishments")
-        .insert({ name: organization, created_by: user.id, max_screens: 0 } as any)
+        .insert({ name: organization, created_by: null, max_screens: 0 } as any)
         .select("id, name")
         .single();
       if (establishmentError) throw establishmentError;
 
-      await supabase
-        .from("user_establishments")
-        .insert({ user_id: user.id, establishment_id: establishment.id, role: "admin" } as any);
-
       const { data: screen, error: screenError } = await supabase
         .from("screens")
-        .insert({ name: display, slug, user_id: user.id, establishment_id: establishment.id } as any)
+        .insert({ name: display, slug, user_id: null, establishment_id: establishment.id } as any)
         .select("id, name, slug")
         .single();
       if (screenError) throw screenError;
