@@ -39,6 +39,23 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [currentEstablishmentId, setCurrentEstablishmentId] = useState<string | null>(null);
 
+  const { data: publicEstablishments = [], isLoading: loadingPublicEstablishments } = useQuery({
+    queryKey: ["public_establishments_single"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("establishments")
+        .select("id, name, address")
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (error) throw error;
+      return (data || []).map((est: any) => ({
+        establishment_id: est.id,
+        role: "admin",
+        establishment: est,
+      })) as EstablishmentMembership[];
+    },
+  });
+
   // Check global roles
   const { data: userGlobalRoles = [], isLoading: loadingAdmin } = useQuery({
     queryKey: ["global_roles_check", user?.id],
@@ -73,6 +90,9 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const effectiveMemberships = user ? memberships : publicEstablishments;
+  const effectiveIsGlobalAdmin = user ? isGlobalAdmin : false;
+
   // Restore from localStorage on mount
   useEffect(() => {
     if (user?.id) {
@@ -87,21 +107,21 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
 
   // Ensure selected establishment is always valid for the current non-admin user
   useEffect(() => {
-    if (loadingAdmin || loadingMemberships || isGlobalAdmin) return;
+    if (loadingAdmin || loadingMemberships || loadingPublicEstablishments || effectiveIsGlobalAdmin) return;
 
-    if (memberships.length === 0) {
+    if (effectiveMemberships.length === 0) {
       if (currentEstablishmentId !== null) setCurrentEstablishmentId(null);
       return;
     }
 
     const hasAccessToCurrent = currentEstablishmentId
-      ? memberships.some((m) => m.establishment_id === currentEstablishmentId)
+      ? effectiveMemberships.some((m) => m.establishment_id === currentEstablishmentId)
       : false;
 
     if (!currentEstablishmentId || !hasAccessToCurrent) {
-      setCurrentEstablishmentId(memberships[0].establishment_id);
+      setCurrentEstablishmentId(effectiveMemberships[0].establishment_id);
     }
-  }, [memberships, currentEstablishmentId, isGlobalAdmin, loadingAdmin, loadingMemberships]);
+  }, [effectiveMemberships, currentEstablishmentId, effectiveIsGlobalAdmin, loadingAdmin, loadingMemberships, loadingPublicEstablishments]);
 
   // Persist selection in localStorage
   useEffect(() => {
@@ -110,21 +130,21 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, currentEstablishmentId]);
 
-  const currentMembership = memberships.find(m => m.establishment_id === currentEstablishmentId);
+  const currentMembership = effectiveMemberships.find(m => m.establishment_id === currentEstablishmentId);
   const currentRole = currentMembership?.role ?? null;
-  const isEstablishmentAdmin = currentRole === "admin" || isGlobalAdmin;
+  const isEstablishmentAdmin = currentRole === "admin" || effectiveIsGlobalAdmin;
 
   return (
     <EstablishmentContext.Provider
       value={{
         currentEstablishmentId,
         setCurrentEstablishmentId,
-        memberships,
-        isGlobalAdmin,
+        memberships: effectiveMemberships,
+        isGlobalAdmin: effectiveIsGlobalAdmin,
         isEstablishmentAdmin,
         isMarketing,
         currentRole,
-        isLoading: loadingAdmin || loadingMemberships,
+        isLoading: loadingAdmin || loadingMemberships || loadingPublicEstablishments,
       }}
     >
       {children}
