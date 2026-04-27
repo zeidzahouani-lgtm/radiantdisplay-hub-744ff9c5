@@ -12,6 +12,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LoginParticles } from "@/components/LoginParticles";
 import { CursorGlow } from "@/components/CursorGlow";
 import { LoginRestoreButton } from "@/components/LoginRestoreButton";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -27,6 +28,25 @@ export default function Login() {
 
   const hasMedia = !!settings.login_video_url;
   const isImageMedia = hasMedia && /\.(jpe?g|gif)(\?.*)?$/i.test(settings.login_video_url);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("bootstrap-admin", {
+          body: { action: "check" },
+        });
+        if (!cancelled && !error && data?.has_admin === false) {
+          navigate("/admin/first-login", { replace: true });
+        }
+      } catch {
+        // Keep the login page available if the backend is unreachable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   useEffect(() => {
     const video = videoRef.current;
