@@ -333,7 +333,7 @@ async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: 
 
   const services = await exec(conn, `cd ${supaDir} && docker compose config --services 2>/dev/null || true`);
   const available = new Set((services.stdout || "").split(/\s+/).filter(Boolean));
-  const essentialServices = ["db", "kong", "auth", "rest", "realtime", "storage", "meta", "imgproxy"].filter((name) => available.has(name)).join(" ");
+  const essentialServices = ["db", "kong", "auth", "rest", "realtime", "storage", "meta", "imgproxy", "functions", "edge-runtime"].filter((name) => available.has(name)).join(" ");
   const optionalServices = ["studio"].filter((name) => available.has(name)).join(" ");
 
   // S'assurer qu'analytics/vector ne tournent pas et ne bloquent rien
@@ -350,7 +350,7 @@ async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: 
   if (upEssential.code !== 0) {
     // Dernier recours : démarrer un par un, sans dépendances
     await log("⚠ Échec démarrage groupé — tentative service par service (--no-deps)…");
-    const ordered = ["db", "kong", "rest", "auth", "storage", "meta", "realtime", "imgproxy"].filter((s) => available.has(s));
+    const ordered = ["db", "kong", "rest", "auth", "storage", "meta", "realtime", "imgproxy", "functions", "edge-runtime"].filter((s) => available.has(s));
     let lastOut = "";
     for (const svc of ordered) {
       const r = await exec(conn, `cd ${supaDir} && docker compose up -d --no-deps ${svc} 2>&1`);
