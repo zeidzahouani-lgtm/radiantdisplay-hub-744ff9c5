@@ -279,16 +279,13 @@ export default function AutoFlow() {
       const fileName = decodeURIComponent(fileNameRaw);
       const mediaType = /\.(mp4|webm|mov|m4v|avi)$/i.test(fileName) ? "video" : "image";
 
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) throw new Error("Session expirée, reconnectez-vous");
-
       const { data: insertedMedia, error: mediaError } = await (supabase.from("media") as any)
         .insert({
           name: fileName,
           type: mediaType,
           url: attachmentUrl,
           duration: mediaType === "image" ? 10 : 30,
-          user_id: authData.user.id,
+          user_id: null,
           establishment_id: selectedScreen.establishment_id || null,
         })
         .select("id")
