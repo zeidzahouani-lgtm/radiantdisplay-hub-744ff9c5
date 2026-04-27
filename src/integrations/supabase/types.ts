@@ -225,7 +225,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           description: string | null
           email: string | null
           id: string
@@ -238,7 +238,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           description?: string | null
           email?: string | null
           id?: string
@@ -251,7 +251,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           description?: string | null
           email?: string | null
           id?: string
@@ -393,7 +393,7 @@ export type Database = {
           id: string
           name: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           wall_id: string | null
           wall_mode: string
           width: number
@@ -411,7 +411,7 @@ export type Database = {
           id?: string
           name: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           wall_id?: string | null
           wall_mode?: string
           width?: number
@@ -429,7 +429,7 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           wall_id?: string | null
           wall_mode?: string
           width?: number
@@ -1090,7 +1090,7 @@ export type Database = {
           name: string
           rows: number
           updated_at: string
-          user_id: string
+          user_id: string | null
           wall_layout_mode: string
         }
         Insert: {
@@ -1101,7 +1101,7 @@ export type Database = {
           name: string
           rows?: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           wall_layout_mode?: string
         }
         Update: {
@@ -1112,7 +1112,7 @@ export type Database = {
           name?: string
           rows?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           wall_layout_mode?: string
         }
         Relationships: [
