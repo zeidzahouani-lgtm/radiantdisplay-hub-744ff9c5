@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
 interface MediaData {
   id: string;
@@ -551,8 +552,8 @@ export function useScreenRealtime(screenId: string | undefined, options?: { prev
       const realId = realScreenIdRef.current;
       if (!realId) return;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/screens?id=eq.${realId}&player_session_id=eq.${SESSION_ID}&apikey=${apiKey}`;
+      const apiKey = getSupabasePublishableKey();
+      const url = `${supabaseEndpoint("/rest/v1/screens")}?id=eq.${realId}&player_session_id=eq.${SESSION_ID}&apikey=${apiKey}`;
       const body = JSON.stringify({ status: "offline", player_session_id: null, player_heartbeat_at: null, player_user_agent: null, player_ip: null, player_lan_ip: null });
       try {
         fetch(url, {

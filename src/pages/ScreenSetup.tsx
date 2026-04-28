@@ -127,12 +127,12 @@ function AIGuideTab() {
 
     try {
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/screen-setup-guide`,
+        supabaseEndpoint("/functions/v1/screen-setup-guide"),
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${getSupabasePublishableKey()}`,
           },
           body: JSON.stringify({ model: model.trim() }),
         }
