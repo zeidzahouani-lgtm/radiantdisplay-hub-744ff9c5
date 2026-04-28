@@ -353,7 +353,7 @@ export default function AdminRequests() {
       // Update request status
       await supabase
         .from("registration_requests" as any)
-        .update({ status: "approved", reviewed_by: user?.id, reviewed_at: new Date().toISOString() } as any)
+        .update({ status: "approved", reviewed_by: currentUserId, reviewed_at: new Date().toISOString() } as any)
         .eq("id", regDialog.id);
     },
     onSuccess: () => {
