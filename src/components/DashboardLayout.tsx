@@ -7,6 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
+import { LocalMaintenanceBanner } from "@/components/LocalMaintenanceBanner";
 
 export function DashboardLayout() {
   useEstablishmentBranding();
@@ -18,6 +19,7 @@ export function DashboardLayout() {
         <AnimatedBackground />
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
+          <LocalMaintenanceBanner />
           <header className="h-12 flex items-center justify-between glass-header px-4 shrink-0">
             <SidebarTrigger className="mr-4 text-muted-foreground hover:text-primary transition-colors" />
             <div className="flex items-center gap-2">
