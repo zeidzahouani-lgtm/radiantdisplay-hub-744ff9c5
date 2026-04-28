@@ -22,7 +22,6 @@ const DEFAULT_FORM = {
 
 export default function Establishments() {
   const { user } = useAuth();
-  const { isGlobalAdmin } = useEstablishmentContext();
   const queryClient = useQueryClient();
   const {
     establishments, isLoading,
@@ -43,7 +42,6 @@ export default function Establishments() {
   // All screens (admin)
   const { data: allScreens = [] } = useQuery({
     queryKey: ["admin_all_screens"],
-    enabled: isGlobalAdmin,
     queryFn: async () => {
       const { data, error } = await supabase.from("screens").select("*").order("name");
       if (error) throw error;
@@ -54,7 +52,6 @@ export default function Establishments() {
   // All users (admin)
   const { data: allUsers = [] } = useQuery({
     queryKey: ["admin_users_list"],
-    enabled: isGlobalAdmin,
     queryFn: async () => {
       const { data, error } = await supabase.from("profiles").select("*").order("display_name");
       if (error) throw error;
@@ -65,7 +62,6 @@ export default function Establishments() {
   // User-establishment assignments
   const { data: userEstablishments = [] } = useQuery({
     queryKey: ["user_establishments"],
-    enabled: isGlobalAdmin,
     queryFn: async () => {
       const { data, error } = await supabase.from("user_establishments").select("*");
       if (error) throw error;
@@ -76,7 +72,6 @@ export default function Establishments() {
   // License counts per establishment
   const { data: licenseCounts = {} } = useQuery({
     queryKey: ["license_counts_by_establishment"],
-    enabled: isGlobalAdmin,
     queryFn: async () => {
       const { data, error } = await supabase.from("licenses").select("screen_id, is_active, screens!inner(establishment_id)");
       if (error) return {};
@@ -92,7 +87,7 @@ export default function Establishments() {
   // Check sync status with Support Dravox
   const { data: syncedEstablishments = [] } = useQuery({
     queryKey: ["dravox_est_sync_status", establishments.map((e: any) => e.name)],
-    enabled: isGlobalAdmin && establishments.length > 0,
+    enabled: establishments.length > 0,
     queryFn: async () => {
       const ests = establishments.map((e: any) => ({ name: e.name, email: e.email || "" }));
       const res = await supabase.functions.invoke("sync-client-dravox", {
@@ -103,15 +98,6 @@ export default function Establishments() {
     },
     staleTime: 60_000,
   });
-
-  if (!isGlobalAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <Building2 className="h-12 w-12 mb-3 opacity-30" />
-        <p className="font-medium">Accès refusé</p>
-      </div>
-    );
-  }
 
   const resetForm = () => setFormData({ ...DEFAULT_FORM });
 
