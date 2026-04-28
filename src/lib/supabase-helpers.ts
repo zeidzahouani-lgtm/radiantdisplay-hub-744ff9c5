@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
 export async function uploadMediaFile(
   file: File,
@@ -7,8 +8,8 @@ export async function uploadMediaFile(
   const ext = file.name.split('.').pop();
   const fileName = `${crypto.randomUUID()}.${ext}`;
 
-  const bucketUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/media/${fileName}`;
-  const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const bucketUrl = supabaseEndpoint(`/storage/v1/object/media/${fileName}`);
+  const apiKey = getSupabasePublishableKey();
 
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -27,7 +28,7 @@ export async function uploadMediaFile(
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`Upload failed: ${xhr.status}`));
     };
-    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.onerror = () => reject(new Error('Upload failed: network/CORS'));
 
     xhr.send(file);
   });

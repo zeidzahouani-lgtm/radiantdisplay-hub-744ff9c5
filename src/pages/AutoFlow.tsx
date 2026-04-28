@@ -17,6 +17,7 @@ import { EditContentDialog } from "@/components/autoflow/EditContentDialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { supabaseEndpoint } from "@/lib/env";
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   pending: { label: "En attente", color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20", icon: Clock },
@@ -124,7 +125,7 @@ export default function AutoFlow() {
     toast.success("Code supprimé");
   };
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/content-webhook`;
+  const webhookUrl = supabaseEndpoint("/functions/v1/content-webhook");
 
   const copyWebhook = () => {
     navigator.clipboard.writeText(webhookUrl);

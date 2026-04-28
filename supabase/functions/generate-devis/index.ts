@@ -5,6 +5,7 @@ const corsHeaders = {
 };
 
 const SUPPORT_DRAVOX_WEBHOOK_URL =
+  Deno.env.get("SUPPORT_DRAVOX_DEVIS_WEBHOOK_URL") ||
   "https://okgmecbjvtmbzuyqwruu.supabase.co/functions/v1/receive-devis-webhook";
 
 Deno.serve(async (req) => {

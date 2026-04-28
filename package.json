@@ -10,7 +10,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:local": "vite build --mode local",
+    "preview:local": "vite preview --host 0.0.0.0",
+    "diagnose:local": "node scripts/diagnose-local.mjs",
+    "deploy:local": "bash scripts/local-deploy.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

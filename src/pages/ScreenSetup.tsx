@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useScreens } from "@/hooks/useScreens";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import ReactMarkdown from "react-markdown";
+import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
 function buildPlayerBase(port?: string): string {
   const { protocol, hostname, port: currentPort } = window.location;
@@ -127,12 +128,12 @@ function AIGuideTab() {
 
     try {
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/screen-setup-guide`,
+        supabaseEndpoint("/functions/v1/screen-setup-guide"),
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${getSupabasePublishableKey()}`,
           },
           body: JSON.stringify({ model: model.trim() }),
         }

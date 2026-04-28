@@ -1,5 +1,10 @@
 import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
 import "./index.css";
+import { logLocalEnvironmentDiagnostics, validateLocalEnvironment } from "@/lib/env";
 
-createRoot(document.getElementById("root")!).render(<App />);
+validateLocalEnvironment();
+logLocalEnvironmentDiagnostics();
+
+void import("./App.tsx").then(({ default: App }) => {
+  createRoot(document.getElementById("root")!).render(<App />);
+});

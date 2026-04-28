@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { explainSupabaseError, getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 import { toast } from "sonner";
 import { Upload, Lock, CheckCircle, Loader2, Image as ImageIcon, Clock, CalendarDays, RotateCw, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,8 +104,8 @@ export default function UploadPage() {
       const ext = file.name.split(".").pop() || (isVideo ? "mp4" : "jpg");
       const filePath = `screen-${screenId}/${Date.now()}_${userName.replace(/\s+/g, "_")}.${ext}`;
 
-      const bucketUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/uploads/${filePath}`;
-      const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const bucketUrl = supabaseEndpoint(`/storage/v1/object/uploads/${filePath}`);
+      const apiKey = getSupabasePublishableKey();
 
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -123,7 +124,7 @@ export default function UploadPage() {
           if (xhr.status >= 200 && xhr.status < 300) resolve();
           else reject(new Error(`Upload failed: ${xhr.status}`));
         };
-        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.onerror = () => reject(new Error("Upload failed: network/CORS"));
         xhr.send(file);
       });
 
@@ -161,7 +162,8 @@ export default function UploadPage() {
       setStep("done");
       toast.success(`${isVideo ? "Vidéo" : "Image"} envoyée ! Elle sera diffusée pendant ${label}.`);
     } catch (err: any) {
-      toast.error("Erreur: " + (err.message || "Upload échoué"));
+      const diagnostic = explainSupabaseError(err, "Upload QR / storage uploads");
+      toast.error(`Erreur: ${diagnostic.cause} — ${err.message || "Upload échoué"}`);
     } finally {
       setUploading(false);
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
 interface DiagnosticProps {
   screenId: string | undefined;
@@ -407,7 +408,7 @@ export default function DiagnosticOverlay(props: DiagnosticProps) {
     var check = function() {
       setNetworkOk(navigator.onLine !== false);
 
-      fetch(import.meta.env.VITE_SUPABASE_URL + "/rest/v1/?apikey=" + import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, {
+      fetch(supabaseEndpoint("/rest/v1/establishments?select=id&limit=1") + "&apikey=" + getSupabasePublishableKey(), {
         method: "HEAD",
       }).then(function(r) {
         setSupabaseOk(r.ok);

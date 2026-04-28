@@ -1,9 +1,10 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { explainSupabaseError } from "@/lib/env";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -43,7 +44,11 @@ const AdminBackup = lazy(() => import("./pages/AdminBackup"));
 const AdminServerStatus = lazy(() => import("./pages/AdminServerStatus"));
 const FirstAdminLogin = lazy(() => import("./pages/FirstAdminLogin"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => explainSupabaseError(error, `Query ${query.queryHash}`),
+  }),
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
