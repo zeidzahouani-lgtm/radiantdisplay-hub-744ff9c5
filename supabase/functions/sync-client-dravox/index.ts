@@ -6,7 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const WEBHOOK_URL = "https://okgmecbjvtmbzuyqwruu.supabase.co/functions/v1/receive-screenflow-data";
+const WEBHOOK_URL =
+  Deno.env.get("SUPPORT_DRAVOX_SCREENFLOW_WEBHOOK_URL") ||
+  "https://okgmecbjvtmbzuyqwruu.supabase.co/functions/v1/receive-screenflow-data";
 
 async function checkClientExists(webhookSecret: string, email?: string, nom?: string): Promise<boolean> {
   try {
