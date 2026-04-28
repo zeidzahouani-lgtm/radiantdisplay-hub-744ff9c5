@@ -6,8 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
-import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Activity, Cpu, MemoryStick, HardDrive, Server, Container, Database, RefreshCw, Loader2, Network, Wifi, Gauge } from "lucide-react";
@@ -43,7 +41,6 @@ interface DbData {
 }
 
 export default function AdminServerStatus() {
-  const { isGlobalAdmin } = useEstablishmentContext();
   const [host, setHost] = useState(() => localStorage.getItem("server_stats_host") || "");
   const [port, setPort] = useState(() => localStorage.getItem("server_stats_port") || "22");
   const [username, setUsername] = useState(() => localStorage.getItem("server_stats_user") || "root");
@@ -52,8 +49,6 @@ export default function AdminServerStatus() {
   const [server, setServer] = useState<ServerData | null>(null);
   const [database, setDatabase] = useState<DbData | null>(null);
   const [lastFetch, setLastFetch] = useState<string | null>(null);
-
-  if (!isGlobalAdmin) return <Navigate to="/" replace />;
 
   const fetchStats = async () => {
     if (!host || !username || !password) {
