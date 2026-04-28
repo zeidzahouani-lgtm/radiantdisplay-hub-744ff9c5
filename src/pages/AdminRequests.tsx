@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ClipboardList, KeyRound, Shield, Check, X, RefreshCw, Copy, Eye, EyeOff, UserPlus, Building2, Monitor, Mail, History, Pencil, Search } from "lucide-react";
+import { ClipboardList, KeyRound, Check, X, RefreshCw, Copy, Eye, EyeOff, UserPlus, Building2, Monitor, Mail, History, Pencil, Search } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
