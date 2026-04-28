@@ -78,7 +78,6 @@ export default function AdminRequests() {
   // Registration requests
   const { data: regRequests = [] } = useQuery({
     queryKey: ["registration_requests"],
-    enabled: isAdmin,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("registration_requests" as any)
@@ -92,7 +91,6 @@ export default function AdminRequests() {
   // Admin profiles for history display
   const { data: profiles = [] } = useQuery({
     queryKey: ["admin_profiles"],
-    enabled: isAdmin,
     queryFn: async () => {
       const { data, error } = await supabase.from("profiles").select("id, display_name, email");
       if (error) throw error;
@@ -375,7 +373,7 @@ export default function AdminRequests() {
         .from("registration_requests" as any)
         .update({
           status: "rejected",
-          reviewed_by: user?.id,
+          reviewed_by: currentUserId,
           reviewed_at: new Date().toISOString(),
           rejection_reason: rejectionReason || null,
         } as any)
@@ -463,15 +461,6 @@ export default function AdminRequests() {
     if (status === "rejected") return <Badge variant="destructive">Refusé</Badge>;
     return <Badge variant="secondary">{status}</Badge>;
   };
-
-  if (!isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <Shield className="h-12 w-12 mb-3 opacity-30" />
-        <p className="font-medium">Accès refusé</p>
-      </div>
-    );
-  }
 
   const pendingResets = resetRequests.filter((r) => r.status === "pending").length;
   const pendingRegs = regRequests.filter((r) => r.status === "pending").length;
