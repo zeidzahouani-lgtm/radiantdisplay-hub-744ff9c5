@@ -58,7 +58,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { settings } = useAppSettings();
-  const { isGlobalAdmin, isEstablishmentAdmin, isMarketing, currentEstablishmentId, memberships } = useEstablishmentContext();
+  const { isGlobalAdmin, currentEstablishmentId, memberships } = useEstablishmentContext();
   const { getSetting } = useEstablishmentSettings(currentEstablishmentId);
 
   const showAdminSection = true;
