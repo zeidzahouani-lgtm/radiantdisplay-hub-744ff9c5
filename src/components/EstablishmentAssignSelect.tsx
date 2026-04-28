@@ -1,7 +1,6 @@
 import { Building2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEstablishments } from "@/hooks/useEstablishments";
-import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { toast } from "sonner";
 
 interface Props {
@@ -22,10 +21,7 @@ export function EstablishmentAssignSelect({
   className,
   adminOnly = true,
 }: Props) {
-  const { isGlobalAdmin } = useEstablishmentContext();
   const { establishments } = useEstablishments();
-
-  if (adminOnly && !isGlobalAdmin) return null;
 
   const handleChange = async (value: string) => {
     try {
