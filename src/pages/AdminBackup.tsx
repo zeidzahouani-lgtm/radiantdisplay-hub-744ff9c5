@@ -139,7 +139,6 @@ services:
 }
 
 export default function AdminBackup() {
-  const { isGlobalAdmin } = useEstablishmentContext();
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<string>("");
   const [progressPct, setProgressPct] = useState(0);
@@ -257,8 +256,6 @@ export default function AdminBackup() {
     try { localStorage.removeItem(SSH_CONFIG_KEY); } catch {}
     toast.success("Configuration locale effacée");
   };
-
-  if (!isGlobalAdmin) return <Navigate to="/" replace />;
 
   // ============ EXPORTS ============
 
