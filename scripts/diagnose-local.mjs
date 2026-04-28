@@ -47,8 +47,8 @@ const key = env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 if (base && key && globalThis.fetch) {
   const checks = [
     ['REST establishments', `${base}/rest/v1/establishments?select=id&limit=1`, { apikey: key, Authorization: `Bearer ${key}` }],
-    ['Storage media', `${base}/storage/v1/object/list/media`, { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, 'POST', JSON.stringify({ limit: 1 })],
-    ['Functions route', `${base}/functions/v1/`, { apikey: key, Authorization: `Bearer ${key}` }],
+    ['Storage media', `${base}/storage/v1/object/list/media`, { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, 'POST', JSON.stringify({ prefix: '', limit: 1 })],
+    ['Functions bootstrap-admin', `${base}/functions/v1/bootstrap-admin`, { apikey: key, Authorization: `Bearer ${key}` }, 'OPTIONS'],
   ];
   for (const [label, url, headers, method = 'GET', body] of checks) {
     try {
