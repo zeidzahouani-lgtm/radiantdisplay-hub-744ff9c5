@@ -60,22 +60,11 @@ interface RegistrationRequest {
 export default function AdminRequests() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-
-  // Admin check
-  const { data: currentUserRoles = [] } = useQuery({
-    queryKey: ["my_roles"],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", user?.id || "");
-      return data?.map((r) => r.role) || [];
-    },
-    enabled: !!user,
-  });
-  const isAdmin = currentUserRoles.includes("admin");
+  const currentUserId = user?.id ?? null;
 
   // Password reset requests
   const { data: resetRequests = [] } = useQuery({
     queryKey: ["password_reset_requests"],
-    enabled: isAdmin,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("password_reset_requests" as any)
@@ -267,7 +256,7 @@ export default function AdminRequests() {
 
       await supabase
         .from("password_reset_requests" as any)
-        .update({ status: "handled", handled_by: user?.id, handled_at: new Date().toISOString() } as any)
+        .update({ status: "handled", handled_by: currentUserId, handled_at: new Date().toISOString() } as any)
         .eq("id", resetDialog.id);
     },
     onSuccess: () => {
@@ -305,7 +294,7 @@ export default function AdminRequests() {
         const { data: est, error: estError } = await supabase.from("establishments").insert({
           name: regDialog.establishment_name,
           max_screens: regDialog.num_screens,
-          created_by: user!.id,
+          created_by: currentUserId,
           phone: regDialog.phone,
           address: regDialog.address,
         }).select().single();
@@ -340,7 +329,7 @@ export default function AdminRequests() {
 
       const licensesToInsert = Array.from({ length: numScreens }, () => ({
         license_key: generateKey(),
-        created_by: user!.id,
+        created_by: currentUserId,
         valid_until: validUntil.toISOString(),
         is_active: true,
         source: 'auto',
