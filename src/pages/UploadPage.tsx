@@ -162,7 +162,8 @@ export default function UploadPage() {
       setStep("done");
       toast.success(`${isVideo ? "Vidéo" : "Image"} envoyée ! Elle sera diffusée pendant ${label}.`);
     } catch (err: any) {
-      toast.error("Erreur: " + (err.message || "Upload échoué"));
+      const diagnostic = explainSupabaseError(err, "Upload QR / storage uploads");
+      toast.error(`Erreur: ${diagnostic.cause} — ${err.message || "Upload échoué"}`);
     } finally {
       setUploading(false);
     }

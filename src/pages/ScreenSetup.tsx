@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useScreens } from "@/hooks/useScreens";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import ReactMarkdown from "react-markdown";
+import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
 function buildPlayerBase(port?: string): string {
   const { protocol, hostname, port: currentPort } = window.location;

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { explainSupabaseError, getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
+import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
 export async function uploadMediaFile(
   file: File,
