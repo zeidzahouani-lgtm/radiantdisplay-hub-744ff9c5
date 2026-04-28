@@ -19,7 +19,6 @@ export function EstablishmentAssignSelect({
   currentEstablishmentId,
   onAssign,
   className,
-  adminOnly = true,
 }: Props) {
   const { establishments } = useEstablishments();
 
