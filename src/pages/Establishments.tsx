@@ -11,9 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Building2, Plus, Tv, Users, Trash2, MapPin, X, Shield, Key, Phone, AtSign, Edit, Upload, ImageIcon, CheckCircle2, CircleDashed } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
 import { useEstablishments } from "@/hooks/useEstablishments";
-import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { EstablishmentDashboard } from "@/components/establishments/EstablishmentDashboard";
 
 const DEFAULT_FORM = {
@@ -21,7 +19,6 @@ const DEFAULT_FORM = {
 };
 
 export default function Establishments() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const {
     establishments, isLoading,
