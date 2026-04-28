@@ -64,9 +64,18 @@ const NGINX_CONF = `server {
   root /usr/share/nginx/html;
   index index.html;
 
+  # SPA fallback
   location / {
     try_files $uri $uri/ /index.html;
   }
+
+  # Si VITE_SUPABASE_URL pointe vers le même domaine que l'app,
+  # proxifiez ces routes vers Kong/Supabase local (port 8000 par défaut).
+  location /auth/v1/ { proxy_pass http://host.docker.internal:8000/auth/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; }
+  location /rest/v1/ { proxy_pass http://host.docker.internal:8000/rest/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; }
+  location /storage/v1/ { proxy_pass http://host.docker.internal:8000/storage/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; }
+  location /functions/v1/ { proxy_pass http://host.docker.internal:8000/functions/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; }
+  location /realtime/v1/ { proxy_pass http://host.docker.internal:8000/realtime/v1/; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; }
 
   location /assets/ {
     expires 1y;
@@ -636,7 +645,7 @@ export default function AdminBackup() {
   // ============ ENV CHECK ============
 
   const envChecks = [
-    { name: "VITE_SUPABASE_URL", value: envUrl, valid: /^https?:\/\/.+\.supabase\.co$/.test(envUrl) },
+    { name: "VITE_SUPABASE_URL", value: envUrl, valid: /^https?:\/\/.+/.test(envUrl) },
     { name: "VITE_SUPABASE_PUBLISHABLE_KEY", value: envKey, valid: envKey.length > 40 },
     { name: "VITE_SUPABASE_PROJECT_ID", value: envProjectId, valid: envProjectId.length > 10 },
   ];
@@ -1205,7 +1214,7 @@ To rebuild manually: docker compose up -d --build
                 </div>
                 <div>
                   <Label className="text-xs">VITE_SUPABASE_URL</Label>
-                  <Input value={envUrl} onChange={e => setEnvUrl(e.target.value)} placeholder="https://xxx.supabase.co" className="font-mono text-xs" />
+                  <Input value={envUrl} onChange={e => setEnvUrl(e.target.value)} placeholder="http://IP_SERVEUR:8080 ou http://IP_SERVEUR:8000" className="font-mono text-xs" />
                 </div>
                 <div>
                   <Label className="text-xs">VITE_SUPABASE_PUBLISHABLE_KEY</Label>
