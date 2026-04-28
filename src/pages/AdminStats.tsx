@@ -4,11 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Tv, Key, Users, MonitorPlay, ShieldCheck, ShieldOff, Activity } from "lucide-react";
 import { isScreenReallyOnline } from "@/lib/screen-utils";
-import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 
 export default function AdminStats() {
-  const { isGlobalAdmin } = useEstablishmentContext();
-
   const { data: screens = [] } = useQuery({
     queryKey: ["admin-stats-screens"],
     queryFn: async () => {
@@ -18,7 +15,6 @@ export default function AdminStats() {
       if (error) throw error;
       return data || [];
     },
-    enabled: isGlobalAdmin,
   });
 
   const { data: licenses = [] } = useQuery({
@@ -30,7 +26,6 @@ export default function AdminStats() {
       if (error) throw error;
       return data || [];
     },
-    enabled: isGlobalAdmin,
   });
 
   const { data: establishments = [] } = useQuery({
@@ -42,7 +37,6 @@ export default function AdminStats() {
       if (error) throw error;
       return data || [];
     },
-    enabled: isGlobalAdmin,
   });
 
   const { data: users = [] } = useQuery({
@@ -52,7 +46,6 @@ export default function AdminStats() {
       if (error) throw error;
       return data || [];
     },
-    enabled: isGlobalAdmin,
   });
 
   const { data: media = [] } = useQuery({
@@ -62,16 +55,7 @@ export default function AdminStats() {
       if (error) throw error;
       return data || [];
     },
-    enabled: isGlobalAdmin,
   });
-
-  if (!isGlobalAdmin) {
-    return (
-      <div className="p-6">
-        <p className="text-muted-foreground">Accès réservé aux administrateurs.</p>
-      </div>
-    );
-  }
 
   const onlineScreens = screens.filter((s) => isScreenReallyOnline(s));
   const offlineScreens = screens.filter((s) => !isScreenReallyOnline(s));

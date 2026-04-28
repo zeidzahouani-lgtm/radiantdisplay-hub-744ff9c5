@@ -50,6 +50,7 @@ const globalAdminItems = [
   { title: "Statistiques", url: "/admin/stats", icon: BarChart3 },
   { title: "Backup & Docker", url: "/admin/backup", icon: DatabaseBackup },
   { title: "État Serveur", url: "/admin/server-status", icon: Activity },
+  { title: "Santé locale", url: "/admin/health", icon: Activity },
 ];
 
 export function AppSidebar() {
@@ -57,15 +58,15 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { settings } = useAppSettings();
-  const { isGlobalAdmin, isEstablishmentAdmin, isMarketing, currentEstablishmentId, memberships } = useEstablishmentContext();
+  const { isGlobalAdmin, currentEstablishmentId, memberships } = useEstablishmentContext();
   const { getSetting } = useEstablishmentSettings(currentEstablishmentId);
 
-  const showAdminSection = isGlobalAdmin || isEstablishmentAdmin || !!currentEstablishmentId;
+  const showAdminSection = true;
 
   // Pending requests count for badge
   const { data: pendingRequestsCount = 0 } = useQuery({
     queryKey: ["pending_requests_count"],
-    enabled: isGlobalAdmin,
+    enabled: true,
     refetchInterval: 30000,
     queryFn: async () => {
       const [{ count: resets }, { count: regs }] = await Promise.all([
@@ -155,11 +156,8 @@ export function AppSidebar() {
             <SidebarGroupLabel className="text-muted-foreground/50 uppercase tracking-widest text-[10px] font-medium">Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="space-y-0.5">
-                {establishmentAdminItems
-                  .filter(item => !item.adminOnly || isEstablishmentAdmin || isGlobalAdmin)
-                  .filter(item => !item.hideForMarketing || !isMarketing || isGlobalAdmin)
-                  .map((item) => renderNavItem(item, true))}
-                {isGlobalAdmin && globalAdminItems.map((item) => {
+                {establishmentAdminItems.map((item) => renderNavItem(item, true))}
+                {globalAdminItems.map((item) => {
                   if (item.url === "/admin/requests" && pendingRequestsCount > 0) {
                     return (
                       <SidebarMenuItem key={item.title}>

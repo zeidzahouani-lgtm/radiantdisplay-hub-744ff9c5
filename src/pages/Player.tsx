@@ -8,6 +8,7 @@ import { validateLicense, activateLicenseByKey } from "@/hooks/useLicenses";
 import { QRCodeSVG } from "qrcode.react";
 import FallbackScreen from "@/components/player/FallbackScreen";
 import DiagnosticOverlay from "@/components/player/DiagnosticOverlay";
+import { useLocalHealth } from "@/hooks/useLocalHealth";
 
 // Hook to fetch active contents for a screen filtered by current time
 function useActiveContents(screenId: string | undefined) {
@@ -787,6 +788,32 @@ function ActiveContentCarousel({ contents, screenOrientation }: { contents: Arra
 
 export default function Player() {
   const { id } = useParams<{ id: string }>();
+  const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useLocalHealth(10000);
+
+  if (healthLoading || health?.restOk === false) {
+    return (
+      <div style={{ position: "fixed", inset: 0, backgroundColor: "#05070d", display: "flex", alignItems: "center", justifyContent: "center", color: "#e5e7eb", padding: 32 }}>
+        <div style={{ maxWidth: 560, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+          <MonitorX style={{ height: 56, width: 56, color: "#ef4444" }} />
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: "0.08em" }}>Maintenance locale</h1>
+          <p style={{ color: "#9ca3af", lineHeight: 1.6 }}>
+            Le player est bloqué tant que la base de données locale ne répond pas sur /rest/v1.
+          </p>
+          {health?.checks.map((check) => (
+            <div key={check.name} style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 12px", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: check.ok ? "#22c55e" : "#ef4444" }}>
+              <span>{check.label}</span><span>{check.status ?? "KO"} {check.error || check.statusText}</span>
+            </div>
+          ))}
+          <button onClick={() => refetchHealth()} style={{ marginTop: 8, padding: "12px 22px", borderRadius: 8, backgroundColor: "#3b82f6", color: "#fff", border: 0, fontWeight: 600 }}>Réessayer</button>
+        </div>
+      </div>
+    );
+  }
+
+  return <PlayerRuntime id={id} />;
+}
+
+function PlayerRuntime({ id }: { id: string | undefined }) {
   const urlDebug1 = typeof window !== "undefined" && window.location.search.indexOf("debug=1") >= 0;
   const urlDebug2 = typeof window !== "undefined" && window.location.search.indexOf("debug=2") >= 0;
   const previewMode = typeof window !== "undefined" && window.location.search.indexOf("preview=1") >= 0;

@@ -9,7 +9,7 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { validatePassword } from "@/lib/password-validation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Users, Shield, ShieldCheck, UserPlus, Building2, X, RefreshCw, CheckCircle2, CircleDashed, KeyRound, Pencil, Trash2, Megaphone } from "lucide-react";
+import { Users, ShieldCheck, UserPlus, Building2, X, RefreshCw, CheckCircle2, CircleDashed, KeyRound, Pencil, Trash2, Megaphone } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,20 +41,10 @@ export default function AdminUsers() {
   const [editEmail, setEditEmail] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<UserProfile | null>(null);
 
-  const { data: currentUserRoles = [] } = useQuery({
-    queryKey: ["my_roles"],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", user?.id || "");
-      return data?.map((r) => r.role) || [];
-    },
-    enabled: !!user,
-  });
-
-  const isAdmin = currentUserRoles.includes("admin");
+  const isAdmin = true;
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["admin_users"],
-    enabled: isAdmin,
     queryFn: async () => {
       const { data: profiles, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
       if (error) throw error;
@@ -285,16 +275,6 @@ export default function AdminUsers() {
       toast({ title: "Erreur", variant: "destructive" });
     }
   };
-
-  if (!isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <Shield className="h-12 w-12 mb-3 opacity-30" />
-        <p className="font-medium">Accès refusé</p>
-        <p className="text-sm">Vous devez être administrateur pour accéder à cette page.</p>
-      </div>
-    );
-  }
 
   const selectedUser = showEstDialog ? users.find((u) => u.id === showEstDialog) : null;
   const selectedUserEsts = selectedUser?.establishments || [];

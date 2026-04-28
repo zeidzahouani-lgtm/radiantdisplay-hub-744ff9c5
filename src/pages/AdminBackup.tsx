@@ -10,8 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
-import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -139,7 +137,6 @@ services:
 }
 
 export default function AdminBackup() {
-  const { isGlobalAdmin } = useEstablishmentContext();
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<string>("");
   const [progressPct, setProgressPct] = useState(0);
@@ -257,8 +254,6 @@ export default function AdminBackup() {
     try { localStorage.removeItem(SSH_CONFIG_KEY); } catch {}
     toast.success("Configuration locale effacée");
   };
-
-  if (!isGlobalAdmin) return <Navigate to="/" replace />;
 
   // ============ EXPORTS ============
 
