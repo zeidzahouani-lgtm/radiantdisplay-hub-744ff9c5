@@ -1055,12 +1055,12 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         conn,
         `test -d ${remoteDir}/repo/.git && test -f ${remoteDir}/repo/docker-compose.yml && echo EXISTS || echo NEW`,
       );
-      const isExistingInstall = existingCheck.stdout.includes("EXISTS");
+      let isExistingInstall = existingCheck.stdout.includes("EXISTS");
       const supaDirCheck = await exec(
         conn,
         `test -f ${remoteDir}/supabase/docker-compose.yml && test -f ${remoteDir}/supabase/.env && echo EXISTS || echo NEW`,
       );
-      const isExistingSupabase = supaDirCheck.stdout.includes("EXISTS");
+      let isExistingSupabase = supaDirCheck.stdout.includes("EXISTS");
 
       if (forceFreshInstall && (isExistingInstall || isExistingSupabase)) {
         await log(`⚠ Réinstallation complète demandée — arrêt et suppression de l'installation existante dans ${remoteDir}…`);
@@ -1068,6 +1068,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await exec(conn, `[ -f ${remoteDir}/supabase/docker-compose.yml ] && (cd ${remoteDir}/supabase && (docker compose down -v --remove-orphans 2>&1 || docker-compose down -v --remove-orphans 2>&1 || true)) || true`);
         await exec(conn, `${sudoPrefix}rm -rf ${remoteDir}/repo ${remoteDir}/supabase`);
         await log("✓ Ancienne installation supprimée — nouveau déploiement propre");
+        isExistingInstall = false;
+        isExistingSupabase = false;
       }
 
       if (isExistingInstall) {
