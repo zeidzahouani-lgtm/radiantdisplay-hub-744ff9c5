@@ -109,11 +109,12 @@ async function runRealtimeCheck(baseUrl: string): Promise<LocalHealthCheck> {
   });
 }
 
-export async function checkLocalBackendHealth(): Promise<LocalHealthReport> {
+export async function checkLocalBackendHealth(baseUrl = getSupabaseUrl()): Promise<LocalHealthReport> {
+  const base = baseUrl.replace(/\/$/, "");
   const checks = await Promise.all([
-    runCheck({ name: "rest", label: "Base de données REST", url: supabaseEndpoint("/rest/v1/"), method: "HEAD" }),
-    runCheck({ name: "realtime", label: "Realtime", url: supabaseEndpoint("/realtime/v1/"), method: "GET" }),
-    runCheck({ name: "storage", label: "Storage", url: supabaseEndpoint("/storage/v1/object"), method: "HEAD" }),
+    runCheck({ name: "rest", label: "Base de données REST", url: `${base}/rest/v1/`, method: "HEAD" }),
+    runRealtimeCheck(base),
+    runCheck({ name: "storage", label: "Storage", url: `${base}/storage/v1/bucket`, method: "GET" }),
   ]);
 
   const restOk = checks.find((check) => check.name === "rest")?.ok ?? false;
@@ -131,4 +132,23 @@ export async function checkLocalBackendHealth(): Promise<LocalHealthReport> {
         ? "La DB répond, mais certains services locaux sont incomplets."
         : "Maintenance locale: la base de données ne répond pas.",
   };
+}
+
+export function getLocalBackendCandidates() {
+  const configured = getSupabaseUrl();
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return Array.from(new Set([
+    configured,
+    origin,
+    origin.replace(/:8443$/, ":8000").replace(/:8080$/, ":8000"),
+    `${window.location.protocol}//${window.location.hostname}:8000`,
+    `${window.location.protocol}//${window.location.hostname}:8080`,
+  ].filter((url) => /^https?:\/\/.+/.test(url))));
+}
+
+export async function discoverLocalBackends(): Promise<LocalBackendCandidate[]> {
+  const results = await Promise.all(
+    getLocalBackendCandidates().map(async (url) => ({ url, report: await checkLocalBackendHealth(url) }))
+  );
+  return results.sort((a, b) => Number(b.report.restOk) - Number(a.report.restOk));
 }
