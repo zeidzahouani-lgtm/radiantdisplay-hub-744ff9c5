@@ -231,6 +231,18 @@ export default function AdminBackup() {
     });
     toast.success("Ports de rechange appliqués");
   };
+  const captureSshPortSuggestions = (message: string) => {
+    const marker = "__PORT_SUGGESTIONS__";
+    const index = message.indexOf(marker);
+    if (index === -1) return message;
+    try {
+      const suggestions = JSON.parse(message.slice(index + marker.length));
+      if (Array.isArray(suggestions)) setSshPortSuggestions(suggestions.filter((item) => item?.label && item?.suggested));
+    } catch {
+      // Ignore malformed diagnostic payloads and keep the readable error.
+    }
+    return message.slice(0, index).trim();
+  };
 
   // ===== Persist SSH + local Supabase config in localStorage =====
   const SSH_CONFIG_KEY = "screenflow.ssh_deploy_config.v1";
@@ -865,7 +877,8 @@ To rebuild manually: docker compose up -d --build
           return;
         }
         if (parsed.status === "error") {
-          toast.error("Échec du déploiement: " + (parsed.error || "inconnu"));
+          const cleanError = captureSshPortSuggestions(parsed.error || "inconnu");
+          toast.error("Échec du déploiement: " + cleanError);
           return;
         }
         if (Date.now() - lastProgressAt > 3 * 60 * 1000) {
@@ -878,8 +891,9 @@ To rebuild manually: docker compose up -d --build
       setSshLogs(prev => [...prev, "✗ Délai maximum dépassé sans résultat final."]);
       toast.warning("Le déploiement prend plus de 30 min — consultez les logs serveur.");
     } catch (e: any) {
-      setSshLogs(prev => [...prev, "✗ Erreur: " + (e?.message || String(e))]);
-      toast.error("Erreur: " + (e?.message || String(e)));
+      const cleanError = captureSshPortSuggestions(e?.message || String(e));
+      setSshLogs(prev => [...prev, "✗ Erreur: " + cleanError]);
+      toast.error("Erreur: " + cleanError);
     } finally {
       setSshDeploying(false);
     }
