@@ -1008,6 +1008,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log(`→ Starting Supabase containers essentiels (kong:${supaKongPort}, studio:${supaStudioPort}, db:${supaDbPort})…`);
         await syncLocalAuthSafeEnv(conn, supaDir, log);
         await startLocalSupabaseEssentials(conn, supaDir, log);
+        await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
 
         supabaseUrlOverride = supaBrowserUrl;
         supabaseAnonOverride = anonKey;
