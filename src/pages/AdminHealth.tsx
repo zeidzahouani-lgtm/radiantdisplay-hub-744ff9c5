@@ -103,6 +103,9 @@ export default function AdminHealth() {
                 <div className="break-all rounded-md bg-muted p-2 font-mono text-xs text-muted-foreground">{check.url}</div>
                 <div className="flex justify-between gap-3"><span className="text-muted-foreground">Statut</span><span>{check.status ?? "—"} {check.statusText}</span></div>
                 {check.error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-destructive">{check.error}</div>}
+                {check.details && check.details !== check.error && (
+                  <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">{check.details}</div>
+                )}
               </CardContent>
             </Card>
           );
