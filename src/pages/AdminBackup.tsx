@@ -1516,6 +1516,16 @@ To rebuild manually: docker compose up -d --build
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                <Switch checked={sshForceFreshInstall} onCheckedChange={setSshForceFreshInstall} disabled={sshDeploying} />
+                <div className="text-sm">
+                  <p className="font-medium flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" />Réinstallation complète si un serveur existe</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optionnel : si une installation existe dans le dossier distant, le script arrête les conteneurs, supprime l'app et Supabase local, puis recommence depuis zéro.
+                  </p>
+                </div>
+              </div>
+
               <div className="p-3 rounded-lg bg-muted/40 border space-y-3">
                 <div className="flex items-center gap-2">
                   <Switch checked={sshEnableHttps} onCheckedChange={setSshEnableHttps} disabled={sshDeploying} />
