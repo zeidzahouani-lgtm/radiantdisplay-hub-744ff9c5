@@ -155,17 +155,29 @@ async function checkRemotePortsAvailable(
 import base64, json, socket
 ports = json.loads(base64.b64decode(__import__('os').environ['PORTS_B64']).decode())
 busy = []
-for p in ports:
+reserved = set(int(p['value']) for p in ports)
+def is_busy(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(0.4)
+    s.settimeout(0.35)
     try:
-        if s.connect_ex(('127.0.0.1', int(p['value']))) == 0:
-            busy.append(p)
+        return s.connect_ex(('127.0.0.1', int(port))) == 0
     finally:
         s.close()
+def next_free(start):
+    candidate = max(1024, int(start) + 1)
+    while candidate <= 65535:
+        if candidate not in reserved and not is_busy(candidate):
+            reserved.add(candidate)
+            return candidate
+        candidate += 1
+    return None
+for p in ports:
+    if is_busy(p['value']):
+        p['suggested'] = next_free(p['value'])
+        busy.append(p)
 if busy:
     for p in busy:
-        print(f"BUSY|{p['label']}|{p['value']}")
+        print(f"BUSY|{p['label']}|{p['value']}|{p.get('suggested') or ''}")
 else:
     print('OK')
 PY`;
@@ -173,11 +185,16 @@ PY`;
   const output = `${result.stdout}${result.stderr}`;
   const busy = output.split("\n").filter((line) => line.startsWith("BUSY|"));
   if (busy.length > 0) {
+    const suggestions = busy.map((line) => {
+      const [, label, value, suggested] = line.split("|");
+      return { label, current: value, suggested };
+    }).filter((item) => item.suggested);
     const details = busy.map((line) => {
-      const [, label, value] = line.split("|");
-      return `${label} (${value})`;
+      const [, label, value, suggested] = line.split("|");
+      const replacement = suggested ? ` → proposé ${suggested}` : "";
+      return `${label} (${value}${replacement})`;
     }).join(", ");
-    throw new Error(`Ports déjà utilisés sur le serveur: ${details}. Libérez ces ports ou changez les ports dans le formulaire avant de relancer le déploiement.`);
+    throw new Error(`Ports déjà utilisés sur le serveur: ${details}. Appliquez les ports proposés ou changez les ports dans le formulaire avant de relancer. __PORT_SUGGESTIONS__${JSON.stringify(suggestions)}`);
   }
   await log("✓ Ports locaux disponibles et conformes");
 }
