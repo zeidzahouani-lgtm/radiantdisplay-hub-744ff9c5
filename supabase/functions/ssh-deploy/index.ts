@@ -1268,6 +1268,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
         log("⚠ Compose stderr: " + up.stderr.slice(-1500));
         throw new Error("docker compose failed");
       }
+      await ensureDeploymentBudget("vérification finale des conteneurs");
     await log("✓ Containers started");
 
     const ps = await exec(conn, `cd ${remoteDir}/repo && (docker compose ps || docker-compose ps)`);
