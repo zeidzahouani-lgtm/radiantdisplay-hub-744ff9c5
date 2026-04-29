@@ -13,6 +13,7 @@ export type LocalHealthCheck = {
   statusText: string;
   durationMs: number;
   error: string | null;
+  details?: string | null;
 };
 
 export type LocalHealthReport = {
@@ -47,6 +48,11 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
     });
 
     const reachable = response.status > 0 && response.status < 500;
+    const details = !reachable
+      ? response.status === 503
+        ? "HTTP 503: la gateway/proxy répond, mais le service backend local derrière elle est indisponible ou pas démarré. Relancez le déploiement SSH avec backend local, ou redémarrez les conteneurs db/rest/storage/realtime/kong."
+        : `HTTP ${response.status}: ${response.statusText || "réponse non OK"}`
+      : null;
     return {
       ...check,
       ok: reachable,
@@ -54,7 +60,8 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       status: response.status,
       statusText: response.statusText || "Réponse HTTP reçue",
       durationMs: Math.round(performance.now() - started),
-      error: null,
+      error: details,
+      details,
     };
   } catch (error: any) {
     return {
@@ -65,6 +72,7 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       statusText: "Aucune réponse",
       durationMs: Math.round(performance.now() - started),
       error: error?.name === "AbortError" ? "Timeout après 6s" : error?.message || String(error),
+      details: "Aucune réponse HTTP: URL inaccessible, DNS/SSL incorrect, port fermé ou proxy nginx non joignable.",
     };
   } finally {
     window.clearTimeout(timeout);
