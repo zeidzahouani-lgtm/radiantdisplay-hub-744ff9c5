@@ -1020,7 +1020,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         log(`→ Starting Supabase containers essentiels (kong:${supaKongPort}, studio:${supaStudioPort}, db:${supaDbPort})…`);
         await syncLocalAuthSafeEnv(conn, supaDir, log);
-        await startLocalSupabaseEssentials(conn, supaDir, log);
+        await startLocalSupabaseEssentials(conn, supaDir, log, false);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
 
         supabaseUrlOverride = supaBrowserUrl;
@@ -1060,7 +1060,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await log("→ Vérification des conteneurs Supabase existants…");
         await syncSupabaseKongPorts(conn, supaDir, supaKongPort, supaKongHttpsPort, log);
         await syncLocalAuthSafeEnv(conn, supaDir, log);
-        await startLocalSupabaseEssentials(conn, supaDir, log);
+        await startLocalSupabaseEssentials(conn, supaDir, log, true);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
         const supaBrowserUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
         supabaseUrlOverride = supaBrowserUrl;
