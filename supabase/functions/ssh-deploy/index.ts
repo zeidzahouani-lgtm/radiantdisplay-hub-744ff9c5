@@ -378,11 +378,11 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
   const probeCmd =
     `ANON=${shQuote(anonKey)} sh -c ` +
     shQuote(
-      `for i in $(seq 1 12); do ` +
-      `rest=$(curl -sS -m 3 -o /tmp/sf_rest.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/rest/v1/establishments?select=id&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
-      `stor=$(curl -sS -m 3 -o /tmp/sf_storage.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/storage/v1/bucket" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
+      `for i in $(seq 1 5); do ` +
+      `rest=$(curl -sS -m 2 -o /tmp/sf_rest.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/rest/v1/establishments?select=id&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
+      `stor=$(curl -sS -m 2 -o /tmp/sf_storage.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/storage/v1/bucket" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
       `case "$rest:$stor" in 2*:2*|2*:401|2*:403|401:2*|403:2*|401:401|401:403|403:401|403:403) echo "OK rest=$rest storage=$stor"; exit 0;; esac; ` +
-      `echo "WAIT rest=$rest storage=$stor"; sleep 2; done; ` +
+      `echo "WAIT rest=$rest storage=$stor"; sleep 1; done; ` +
       `echo FAIL; echo REST_BODY; cat /tmp/sf_rest.txt 2>/dev/null || true; echo STORAGE_BODY; cat /tmp/sf_storage.txt 2>/dev/null || true`
     );
   let probe = await exec(conn, probeCmd);
