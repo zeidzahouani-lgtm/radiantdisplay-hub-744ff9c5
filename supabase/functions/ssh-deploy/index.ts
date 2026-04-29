@@ -378,9 +378,9 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
   const probeCmd =
     `ANON=${shQuote(anonKey)} sh -c ` +
     shQuote(
-      `for i in $(seq 1 45); do ` +
-      `rest=$(curl -sS -m 5 -o /tmp/sf_rest.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/rest/v1/establishments?select=id&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
-      `stor=$(curl -sS -m 5 -o /tmp/sf_storage.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/storage/v1/bucket" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
+      `for i in $(seq 1 12); do ` +
+      `rest=$(curl -sS -m 3 -o /tmp/sf_rest.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/rest/v1/establishments?select=id&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
+      `stor=$(curl -sS -m 3 -o /tmp/sf_storage.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/storage/v1/bucket" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
       `case "$rest:$stor" in 2*:2*|2*:401|2*:403|401:2*|403:2*|401:401|401:403|403:401|403:403) echo "OK rest=$rest storage=$stor"; exit 0;; esac; ` +
       `echo "WAIT rest=$rest storage=$stor"; sleep 2; done; ` +
       `echo FAIL; echo REST_BODY; cat /tmp/sf_rest.txt 2>/dev/null || true; echo STORAGE_BODY; cat /tmp/sf_storage.txt 2>/dev/null || true`
@@ -392,18 +392,19 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
     return;
   }
 
-  await log("⚠ REST/Storage répondent mal (souvent HTTP 503). Redémarrage ciblé des services locaux…");
+  await log("⚠ REST/Storage répondent mal (souvent HTTP 503). Redémarrage ciblé rapide des services locaux…");
   const restart = await exec(conn, `cd ${supaDir} && docker compose up -d db rest storage realtime auth kong 2>&1 && docker compose restart rest storage realtime kong 2>&1 || true`);
   await log((`${restart.stdout}${restart.stderr}`).slice(-1600));
   probe = await exec(conn, probeCmd);
   output = `${probe.stdout}${probe.stderr}`;
   if (!(probe.code === 0 && /OK rest=/.test(output))) {
     const ps = await exec(conn, `cd ${supaDir} && docker compose ps && docker compose logs --tail=80 rest storage realtime kong 2>&1 || true`);
-    throw new Error(
-      "La gateway locale répond mais REST/Storage restent indisponibles. " +
-      "Cela provoque les HTTP 503 vus dans /admin/health. Détails: " +
+    await log(
+      "⚠ La gateway locale répond mais REST/Storage restent indisponibles après réparation rapide. " +
+      "Le déploiement continue pour livrer l'interface; ouvrez /admin/health puis redémarrez les conteneurs locaux si la DB reste KO. Détails: " +
       `${output}\n${ps.stdout}${ps.stderr}`.slice(-2500)
     );
+    return;
   }
   await log(`✓ Services locaux réparés (${output.match(/OK rest=.*$/m)?.[0] || "OK"})`);
 }
