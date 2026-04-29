@@ -36,6 +36,7 @@ interface DeployBody {
   https_domain?: string;
   // Local self-hosted Supabase (optional)
   install_supabase_local?: boolean;
+  force_fresh_install?: boolean;
   supabase_kong_http_port?: string;   // public REST/Auth gateway (default 8000)
   supabase_studio_port?: string;      // Supabase Studio UI (default 3000)
   supabase_db_port?: string;          // Postgres (default 5432)
@@ -145,18 +146,38 @@ async function checkRemotePortsAvailable(
   conn: Client,
   ports: Array<{ label: string; value: string; required: boolean }>,
   log: (m: string) => Promise<void> | void,
+  ignoredComposeDirs: string[] = [],
 ) {
   const requiredPorts = ports.filter((port) => port.required);
   if (requiredPorts.length === 0) return;
 
   await log(`→ Vérification des ports locaux requis: ${requiredPorts.map((p) => `${p.label}:${p.value}`).join(", ")}…`);
   const payload = btoa(JSON.stringify(requiredPorts));
-  const script = `PORTS_B64=${shQuote(payload)} python3 - <<'PY'
+  const ignoredPayload = btoa(JSON.stringify(ignoredComposeDirs));
+  const script = `PORTS_B64=${shQuote(payload)} IGNORE_DIRS_B64=${shQuote(ignoredPayload)} python3 - <<'PY'
 import base64, json, socket
+import os, subprocess
 ports = json.loads(base64.b64decode(__import__('os').environ['PORTS_B64']).decode())
+ignore_dirs = json.loads(base64.b64decode(os.environ.get('IGNORE_DIRS_B64', 'W10=')).decode())
 busy = []
 reserved = set(int(p['value']) for p in ports)
+ignored_ports = set()
+for d in ignore_dirs:
+    try:
+        out = subprocess.run(['sh', '-lc', f'cd {d} 2>/dev/null && docker compose ps -q 2>/dev/null'], capture_output=True, text=True, timeout=4).stdout
+        ids = [x for x in out.split() if x]
+        if not ids:
+            continue
+        quoted = ' '.join(ids)
+        inspect = subprocess.run(['sh', '-lc', f'docker inspect --format "{{{{range $p, $c := .NetworkSettings.Ports}}}}{{{{range $c}}}}{{{{.HostPort}}}} {{{{end}}}}{{{{end}}}}" {quoted} 2>/dev/null'], capture_output=True, text=True, timeout=4).stdout
+        for token in inspect.split():
+            if token.isdigit():
+                ignored_ports.add(int(token))
+    except Exception:
+        pass
 def is_busy(port):
+    if int(port) in ignored_ports:
+        return False
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(0.35)
     try:
