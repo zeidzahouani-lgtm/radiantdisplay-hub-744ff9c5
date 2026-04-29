@@ -326,7 +326,7 @@ print(f"OK removed={removed}")
   await exec(conn, `cd ${supaDir} && docker compose rm -sf kong 2>&1 || true`);
 }
 
-async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: (m: string) => Promise<void> | void) {
+async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: (m: string) => Promise<void> | void, skipPull = false) {
   // 0) Patcher le compose pour retirer la dépendance bloquante sur analytics
   await patchComposeRemoveAnalytics(conn, supaDir, log);
   await patchKongKeyauthCredentials(conn, supaDir, log);
@@ -340,8 +340,12 @@ async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: 
   await exec(conn, `cd ${supaDir} && docker compose stop analytics vector 2>&1 || true`);
   await exec(conn, `cd ${supaDir} && docker compose rm -f analytics vector 2>&1 || true`);
 
-  const pull = await exec(conn, `cd ${supaDir} && docker compose pull ${essentialServices} ${optionalServices} 2>&1 | tail -80 || true`);
-  await log((`${pull.stdout}${pull.stderr}`).slice(-1800));
+  if (skipPull) {
+    await log("✓ Images locales déjà présentes — pull Docker ignoré pour éviter un déploiement trop long.");
+  } else {
+    const pull = await exec(conn, `cd ${supaDir} && docker compose pull ${essentialServices} ${optionalServices} 2>&1 | tail -80 || true`);
+    await log((`${pull.stdout}${pull.stderr}`).slice(-1800));
+  }
 
   const upEssential = await exec(conn, `cd ${supaDir} && docker compose up -d ${essentialServices} 2>&1`);
   const essentialOutput = `${upEssential.stdout}${upEssential.stderr}`;
@@ -378,11 +382,11 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
   const probeCmd =
     `ANON=${shQuote(anonKey)} sh -c ` +
     shQuote(
-      `for i in $(seq 1 45); do ` +
-      `rest=$(curl -sS -m 5 -o /tmp/sf_rest.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/rest/v1/establishments?select=id&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
-      `stor=$(curl -sS -m 5 -o /tmp/sf_storage.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/storage/v1/bucket" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
+      `for i in $(seq 1 5); do ` +
+      `rest=$(curl -sS -m 2 -o /tmp/sf_rest.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/rest/v1/establishments?select=id&limit=1" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
+      `stor=$(curl -sS -m 2 -o /tmp/sf_storage.txt -w "%{http_code}" "http://127.0.0.1:${kongPort}/storage/v1/bucket" -H "apikey: $ANON" -H "Authorization: Bearer $ANON" 2>/dev/null || true); ` +
       `case "$rest:$stor" in 2*:2*|2*:401|2*:403|401:2*|403:2*|401:401|401:403|403:401|403:403) echo "OK rest=$rest storage=$stor"; exit 0;; esac; ` +
-      `echo "WAIT rest=$rest storage=$stor"; sleep 2; done; ` +
+      `echo "WAIT rest=$rest storage=$stor"; sleep 1; done; ` +
       `echo FAIL; echo REST_BODY; cat /tmp/sf_rest.txt 2>/dev/null || true; echo STORAGE_BODY; cat /tmp/sf_storage.txt 2>/dev/null || true`
     );
   let probe = await exec(conn, probeCmd);
@@ -392,18 +396,19 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
     return;
   }
 
-  await log("⚠ REST/Storage répondent mal (souvent HTTP 503). Redémarrage ciblé des services locaux…");
+  await log("⚠ REST/Storage répondent mal (souvent HTTP 503). Redémarrage ciblé rapide des services locaux…");
   const restart = await exec(conn, `cd ${supaDir} && docker compose up -d db rest storage realtime auth kong 2>&1 && docker compose restart rest storage realtime kong 2>&1 || true`);
   await log((`${restart.stdout}${restart.stderr}`).slice(-1600));
   probe = await exec(conn, probeCmd);
   output = `${probe.stdout}${probe.stderr}`;
   if (!(probe.code === 0 && /OK rest=/.test(output))) {
     const ps = await exec(conn, `cd ${supaDir} && docker compose ps && docker compose logs --tail=80 rest storage realtime kong 2>&1 || true`);
-    throw new Error(
-      "La gateway locale répond mais REST/Storage restent indisponibles. " +
-      "Cela provoque les HTTP 503 vus dans /admin/health. Détails: " +
+    await log(
+      "⚠ La gateway locale répond mais REST/Storage restent indisponibles après réparation rapide. " +
+      "Le déploiement continue pour livrer l'interface; ouvrez /admin/health puis redémarrez les conteneurs locaux si la DB reste KO. Détails: " +
       `${output}\n${ps.stdout}${ps.stderr}`.slice(-2500)
     );
+    return;
   }
   await log(`✓ Services locaux réparés (${output.match(/OK rest=.*$/m)?.[0] || "OK"})`);
 }
@@ -884,6 +889,12 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   let supabaseUrlOverride = "";
   let supabaseAnonOverride = "";
   let supabaseProjectIdOverride = "";
+  const deploymentDeadline = Date.now() + 13 * 60 * 1000;
+  const ensureDeploymentBudget = async (nextStep: string) => {
+    if (Date.now() <= deploymentDeadline) return;
+    await log(`⚠ Délai maximum atteint avant: ${nextStep}`);
+    throw new Error(`Déploiement interrompu proprement avant timeout. Dernière étape: ${nextStep}. Relancez le déploiement; les conteneurs déjà téléchargés seront réutilisés.`);
+  };
 
   let gitUrl = body.git_url.trim();
   if (body.git_token && /^https?:\/\//.test(gitUrl)) {
@@ -950,6 +961,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await log(`✓ Supabase local déjà installé dans ${remoteDir}/supabase — réutilisation de la configuration existante`);
       }
 
+      await ensureDeploymentBudget("installation/contrôle Supabase local");
+
       // ===== Optional: install self-hosted Supabase on the same server =====
       if (installSupabase && !isExistingSupabase) {
         const supaDir = `${remoteDir}/supabase`;
@@ -1007,7 +1020,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         log(`→ Starting Supabase containers essentiels (kong:${supaKongPort}, studio:${supaStudioPort}, db:${supaDbPort})…`);
         await syncLocalAuthSafeEnv(conn, supaDir, log);
-        await startLocalSupabaseEssentials(conn, supaDir, log);
+        await startLocalSupabaseEssentials(conn, supaDir, log, false);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
 
         supabaseUrlOverride = supaBrowserUrl;
@@ -1047,7 +1060,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await log("→ Vérification des conteneurs Supabase existants…");
         await syncSupabaseKongPorts(conn, supaDir, supaKongPort, supaKongHttpsPort, log);
         await syncLocalAuthSafeEnv(conn, supaDir, log);
-        await startLocalSupabaseEssentials(conn, supaDir, log);
+        await startLocalSupabaseEssentials(conn, supaDir, log, true);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
         const supaBrowserUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
         supabaseUrlOverride = supaBrowserUrl;
@@ -1057,6 +1070,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         (globalThis as any).__pendingLocalMigrations = { supaDir, postgresPw };
       }
 
+      await ensureDeploymentBudget("clone ou mise à jour du dépôt Git");
       log(`→ Preparing remote directory ${remoteDir}…`);
       // Ne jamais chown -R tout remoteDir ici : il contient aussi le volume Postgres local,
       // et un chown récursif casse global/pg_filenode.map. On ne touche qu'au dossier repo.
@@ -1095,6 +1109,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log("✓ Repo cloned");
       }
 
+      await ensureDeploymentBudget("migrations locales");
       // ===== Apply app migrations to local Supabase =====
       const pending = (globalThis as any).__pendingLocalMigrations;
       if (pending?.supaDir) {
@@ -1130,6 +1145,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
       }
 
 
+      await ensureDeploymentBudget("build Docker de l'application");
       // Generate Dockerfile, nginx.conf, docker-compose.yml inside the repo
       log("→ Writing Dockerfile, nginx.conf, docker-compose.yml…");
       const escEnv = (s: string) => (s || "").replace(/'/g, "'\\''");
@@ -1256,6 +1272,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
         log("⚠ Compose stderr: " + up.stderr.slice(-1500));
         throw new Error("docker compose failed");
       }
+      await ensureDeploymentBudget("vérification finale des conteneurs");
     await log("✓ Containers started");
 
     const ps = await exec(conn, `cd ${remoteDir}/repo && (docker compose ps || docker-compose ps)`);
