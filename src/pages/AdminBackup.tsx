@@ -1550,6 +1550,7 @@ To rebuild manually: docker compose up -d --build
                         <Alert className="md:col-span-3">
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription className="text-xs">
+                            Avant l'installation, le déploiement vérifie automatiquement que les ports Application, API, Studio et Postgres sont valides, différents et libres sur le serveur.
                             Les identifiants de connexion (anon key, mot de passe Studio, mot de passe Postgres) seront affichés dans les logs après le déploiement. <strong>Sauvegardez-les</strong>.
                             La structure (tables, RLS, fonctions) doit ensuite être appliquée via l'onglet <strong>Sauvegarde / Restauration</strong>.
                           </AlertDescription>
