@@ -125,6 +125,63 @@ interface RemotePreflightResult {
   postgresMajor: number | null;
 }
 
+function validatePortValue(label: string, value: string) {
+  if (!/^\d+$/.test(value)) throw new Error(`${label}: port invalide '${value}'. Utilisez un nombre entre 1 et 65535.`);
+  const port = Number.parseInt(value, 10);
+  if (port < 1 || port > 65535) throw new Error(`${label}: port ${value} hors limite. Utilisez un nombre entre 1 et 65535.`);
+}
+
+function validateDistinctPorts(ports: Array<{ label: string; value: string }>) {
+  const seen = new Map<string, string>();
+  for (const port of ports) {
+    validatePortValue(port.label, port.value);
+    const existing = seen.get(port.value);
+    if (existing) throw new Error(`Conflit de ports local: ${existing} et ${port.label} utilisent tous les deux le port ${port.value}. Choisissez des ports différents.`);
+    seen.set(port.value, port.label);
+  }
+}
+
+async function checkRemotePortsAvailable(
+  conn: Client,
+  ports: Array<{ label: string; value: string; required: boolean }>,
+  log: (m: string) => Promise<void> | void,
+) {
+  const requiredPorts = ports.filter((port) => port.required);
+  if (requiredPorts.length === 0) return;
+
+  await log(`→ Vérification des ports locaux requis: ${requiredPorts.map((p) => `${p.label}:${p.value}`).join(", ")}…`);
+  const payload = btoa(JSON.stringify(requiredPorts));
+  const script = `PORTS_B64=${shQuote(payload)} python3 - <<'PY'
+import base64, json, socket
+ports = json.loads(base64.b64decode(__import__('os').environ['PORTS_B64']).decode())
+busy = []
+for p in ports:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.4)
+    try:
+        if s.connect_ex(('127.0.0.1', int(p['value']))) == 0:
+            busy.append(p)
+    finally:
+        s.close()
+if busy:
+    for p in busy:
+        print(f"BUSY|{p['label']}|{p['value']}")
+else:
+    print('OK')
+PY`;
+  const result = await exec(conn, script);
+  const output = `${result.stdout}${result.stderr}`;
+  const busy = output.split("\n").filter((line) => line.startsWith("BUSY|"));
+  if (busy.length > 0) {
+    const details = busy.map((line) => {
+      const [, label, value] = line.split("|");
+      return `${label} (${value})`;
+    }).join(", ");
+    throw new Error(`Ports déjà utilisés sur le serveur: ${details}. Libérez ces ports ou changez les ports dans le formulaire avant de relancer le déploiement.`);
+  }
+  await log("✓ Ports locaux disponibles et conformes");
+}
+
 function parseMajorVersion(output: string, marker: RegExp): number | null {
   const match = output.match(marker);
   return match ? Number.parseInt(match[1], 10) : null;
@@ -886,6 +943,15 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
   const supaStudioPort = body.supabase_studio_port || "3001";
   const supaDbPort = body.supabase_db_port || "5432";
+  const requestedPorts = [
+    { label: "Application", value: appPort, required: true },
+    { label: "HTTPS application", value: httpsPort, required: enableHttps },
+    { label: "API Supabase/Kong", value: supaKongPort, required: installSupabase },
+    { label: "HTTPS Supabase/Kong", value: supaKongHttpsPort, required: installSupabase },
+    { label: "Studio Supabase", value: supaStudioPort, required: installSupabase },
+    { label: "Postgres", value: supaDbPort, required: installSupabase },
+  ];
+  validateDistinctPorts(requestedPorts.filter((port) => port.required));
   let supabaseUrlOverride = "";
   let supabaseAnonOverride = "";
   let supabaseProjectIdOverride = "";
@@ -908,6 +974,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
     try {
       const sudoPrefix = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S `;
       const preflight = await runRemotePreflight(conn, body, remoteDir, installSupabase, log);
+
+      if (installSupabase) {
+        await checkRemotePortsAvailable(conn, requestedPorts, log);
+      }
 
       if ((!preflight.dockerOk || !preflight.composeOk) && body.install_docker) {
         log("→ Installing Docker (this may take 1-3 minutes)…");

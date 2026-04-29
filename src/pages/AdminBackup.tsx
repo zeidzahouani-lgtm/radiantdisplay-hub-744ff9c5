@@ -199,6 +199,27 @@ export default function AdminBackup() {
   const [sshLogs, setSshLogs] = useState<string[]>([]);
   const [sshDeployedUrl, setSshDeployedUrl] = useState<string | null>(null);
 
+  const isValidPort = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
+  const validateSshPorts = () => {
+    const ports = [
+      { label: "Application", value: sshAppPort, active: true },
+      { label: "HTTPS application", value: sshHttpsPort, active: sshEnableHttps },
+      { label: "API Supabase/Kong", value: sshSupaKongPort, active: sshInstallSupabaseLocal },
+      { label: "Studio Supabase", value: sshSupaStudioPort, active: sshInstallSupabaseLocal },
+      { label: "Postgres", value: sshSupaDbPort, active: sshInstallSupabaseLocal },
+    ].filter((port) => port.active);
+    for (const port of ports) {
+      if (!isValidPort(port.value)) return `${port.label}: port invalide (${port.value})`;
+    }
+    const seen = new Map<string, string>();
+    for (const port of ports) {
+      const existing = seen.get(port.value);
+      if (existing) return `Conflit de ports: ${existing} et ${port.label} utilisent ${port.value}`;
+      seen.set(port.value, port.label);
+    }
+    return null;
+  };
+
   // ===== Persist SSH + local Supabase config in localStorage =====
   const SSH_CONFIG_KEY = "screenflow.ssh_deploy_config.v1";
   const hasLoadedConfigRef = useRef(false);
@@ -735,6 +756,11 @@ To rebuild manually: docker compose up -d --build
     const backendProjectId = sshInstallSupabaseLocal ? "" : (sshIsolateBackend ? sshSupabaseProjectId.trim() : envProjectId);
     if (sshIsolateBackend && !sshInstallSupabaseLocal && backendUrl === envUrl) {
       toast.error("L'URL Supabase du serveur local doit être DIFFÉRENTE de celle du projet en ligne");
+      return;
+    }
+    const portError = validateSshPorts();
+    if (portError) {
+      toast.error(portError);
       return;
     }
     setSshDeploying(true);
@@ -1524,6 +1550,7 @@ To rebuild manually: docker compose up -d --build
                         <Alert className="md:col-span-3">
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription className="text-xs">
+                            Avant l'installation, le déploiement vérifie automatiquement que les ports Application, API, Studio et Postgres sont valides, différents et libres sur le serveur.
                             Les identifiants de connexion (anon key, mot de passe Studio, mot de passe Postgres) seront affichés dans les logs après le déploiement. <strong>Sauvegardez-les</strong>.
                             La structure (tables, RLS, fonctions) doit ensuite être appliquée via l'onglet <strong>Sauvegarde / Restauration</strong>.
                           </AlertDescription>
