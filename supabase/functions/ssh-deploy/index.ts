@@ -1014,9 +1014,6 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
       const sudoPrefix = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S `;
       const preflight = await runRemotePreflight(conn, body, remoteDir, installSupabase, log);
 
-      const ignoredPortDirs = forceFreshInstall ? [`${remoteDir}/repo`, `${remoteDir}/supabase`] : [];
-      await checkRemotePortsAvailable(conn, requestedPorts, log, ignoredPortDirs);
-
       if ((!preflight.dockerOk || !preflight.composeOk) && body.install_docker) {
         log("→ Installing Docker (this may take 1-3 minutes)…");
         await exec(conn, `${sudoPrefix}sh -c "(command -v apt-get && apt-get update -y && apt-get install -y curl ca-certificates git) || (command -v dnf && dnf install -y curl ca-certificates git) || (command -v yum && yum install -y curl ca-certificates git) || true"`);
@@ -1071,6 +1068,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         isExistingInstall = false;
         isExistingSupabase = false;
       }
+
+      const ignoredPortDirs = forceFreshInstall ? [] : [`${remoteDir}/repo`, `${remoteDir}/supabase`];
+      await checkRemotePortsAvailable(conn, requestedPorts, log, ignoredPortDirs);
 
       if (isExistingInstall) {
         await log(`✓ Installation existante détectée dans ${remoteDir} — mode mise à jour activé`);
