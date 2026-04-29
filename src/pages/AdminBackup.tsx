@@ -791,6 +791,8 @@ To rebuild manually: docker compose up -d --build
       const settingsKey = `ssh_deploy_job:${jobId}`;
       const start = Date.now();
       const maxMs = 30 * 60 * 1000;
+      let lastProgressAt = Date.now();
+      let lastLogCount = 0;
 
       while (Date.now() - start < maxMs) {
         await new Promise(r => setTimeout(r, 4000));
@@ -803,7 +805,13 @@ To rebuild manually: docker compose up -d --build
         let parsed: any;
         try { parsed = JSON.parse(row.value as string); } catch { continue; }
 
-        if (Array.isArray(parsed.logs)) setSshLogs(parsed.logs);
+        if (Array.isArray(parsed.logs)) {
+          if (parsed.logs.length !== lastLogCount) {
+            lastProgressAt = Date.now();
+            lastLogCount = parsed.logs.length;
+          }
+          setSshLogs(parsed.logs);
+        }
 
         if (parsed.status === "success") {
           handleDeploySuccess(parsed.result?.url, parsed.result?.supabase_local || null);
@@ -813,7 +821,14 @@ To rebuild manually: docker compose up -d --build
           toast.error("Échec du déploiement: " + (parsed.error || "inconnu"));
           return;
         }
+        if (Date.now() - lastProgressAt > 3 * 60 * 1000) {
+          const msg = "✗ Aucun nouveau retour depuis 3 min : le job distant a probablement été coupé par le timeout de la fonction. Relancez le déploiement, il reprendra en mode mise à jour avec les images déjà téléchargées.";
+          setSshLogs(prev => [...prev, msg]);
+          toast.error("Déploiement interrompu sans résultat — relancez une fois.");
+          return;
+        }
       }
+      setSshLogs(prev => [...prev, "✗ Délai maximum dépassé sans résultat final."]);
       toast.warning("Le déploiement prend plus de 30 min — consultez les logs serveur.");
     } catch (e: any) {
       setSshLogs(prev => [...prev, "✗ Erreur: " + (e?.message || String(e))]);
