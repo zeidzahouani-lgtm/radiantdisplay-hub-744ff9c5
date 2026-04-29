@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Database, Download, Container, FileArchive, Loader2, Package, FileCode, Copy,
   Upload, CheckCircle2, XCircle, AlertCircle, ServerCog, Rocket, ShieldCheck,
-  Server, Terminal, Wifi, KeyRound,
+  Server, Terminal, Wifi, KeyRound, Trash2,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Textarea } from "@/components/ui/textarea";
@@ -191,6 +191,7 @@ export default function AdminBackup() {
   const [sshSupabaseProjectId, setSshSupabaseProjectId] = useState("");
   // Install local self-hosted Supabase on the same server
   const [sshInstallSupabaseLocal, setSshInstallSupabaseLocal] = useState(false);
+  const [sshForceFreshInstall, setSshForceFreshInstall] = useState(false);
   const [sshSupaKongPort, setSshSupaKongPort] = useState("8000");
   const [sshSupaStudioPort, setSshSupaStudioPort] = useState("3001");
   const [sshSupaDbPort, setSshSupaDbPort] = useState("5432");
@@ -819,6 +820,7 @@ To rebuild manually: docker compose up -d --build
           https_port: sshHttpsPort,
           https_domain: sshHttpsDomain.trim() || undefined,
           install_supabase_local: sshInstallSupabaseLocal,
+          force_fresh_install: sshForceFreshInstall,
           supabase_kong_http_port: sshSupaKongPort,
           supabase_studio_port: sshSupaStudioPort,
           supabase_db_port: sshSupaDbPort,
@@ -1510,6 +1512,16 @@ To rebuild manually: docker compose up -d --build
                   <p className="font-medium">Installer Docker automatiquement</p>
                   <p className="text-xs text-muted-foreground">
                     Si Docker / Docker Compose ne sont pas trouvés, le script lance <code>get.docker.com</code> via sudo.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                <Switch checked={sshForceFreshInstall} onCheckedChange={setSshForceFreshInstall} disabled={sshDeploying} />
+                <div className="text-sm">
+                  <p className="font-medium flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" />Réinstallation complète si un serveur existe</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optionnel : si une installation existe dans le dossier distant, le script arrête les conteneurs, supprime l'app et Supabase local, puis recommence depuis zéro.
                   </p>
                 </div>
               </div>
