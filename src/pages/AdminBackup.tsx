@@ -198,6 +198,7 @@ export default function AdminBackup() {
   const [sshDeploying, setSshDeploying] = useState(false);
   const [sshLogs, setSshLogs] = useState<string[]>([]);
   const [sshDeployedUrl, setSshDeployedUrl] = useState<string | null>(null);
+  const [sshPortSuggestions, setSshPortSuggestions] = useState<Array<{ label: string; current: string; suggested: string }>>([]);
 
   const isValidPort = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
   const validateSshPorts = () => {
@@ -218,6 +219,17 @@ export default function AdminBackup() {
       seen.set(port.value, port.label);
     }
     return null;
+  };
+  const applySshPortSuggestions = () => {
+    sshPortSuggestions.forEach((item) => {
+      if (item.label === "Application") setSshAppPort(item.suggested);
+      if (item.label === "HTTPS application") setSshHttpsPort(item.suggested);
+      if (item.label === "API Supabase/Kong") setSshSupaKongPort(item.suggested);
+      if (item.label === "HTTPS Supabase/Kong") return;
+      if (item.label === "Studio Supabase") setSshSupaStudioPort(item.suggested);
+      if (item.label === "Postgres") setSshSupaDbPort(item.suggested);
+    });
+    toast.success("Ports de rechange appliqués");
   };
 
   // ===== Persist SSH + local Supabase config in localStorage =====
@@ -767,6 +779,7 @@ To rebuild manually: docker compose up -d --build
     setSshLogs([]);
     setSshDeployedUrl(null);
     setSshLocalSupabaseInfo(null);
+    setSshPortSuggestions([]);
     try {
       setSshLogs(["🔐 Vérification de la session admin…"]);
       const accessToken = await getFreshAccessToken();
