@@ -1,4 +1,4 @@
-import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
+import { getSupabasePublishableKey, getSupabaseUrl, supabaseEndpoint } from "@/lib/env";
 
 export type LocalHealthStatus = "ok" | "warning" | "error";
 
@@ -21,6 +21,11 @@ export type LocalHealthReport = {
   checks: LocalHealthCheck[];
   restOk: boolean;
   message: string;
+};
+
+export type LocalBackendCandidate = {
+  url: string;
+  report: LocalHealthReport;
 };
 
 const AUTH_HEADERS = () => {
@@ -64,6 +69,44 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+async function runRealtimeCheck(baseUrl: string): Promise<LocalHealthCheck> {
+  const started = performance.now();
+  const key = getSupabasePublishableKey();
+  const realtimeUrl = new URL(`${baseUrl.replace(/\/$/, "")}/realtime/v1/websocket`);
+  realtimeUrl.protocol = realtimeUrl.protocol === "https:" ? "wss:" : "ws:";
+  realtimeUrl.searchParams.set("apikey", key);
+  realtimeUrl.searchParams.set("vsn", "1.0.0");
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "Timeout WebSocket", durationMs: Math.round(performance.now() - started), error: "Connexion WebSocket impossible après 6s" });
+    }, 6000);
+
+    try {
+      const socket = new WebSocket(realtimeUrl.toString());
+      socket.onopen = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        socket.close();
+        resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: true, reachable: true, status: 101, statusText: "WebSocket connecté", durationMs: Math.round(performance.now() - started), error: null });
+      };
+      socket.onerror = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "Erreur WebSocket", durationMs: Math.round(performance.now() - started), error: "Vérifiez le proxy /realtime/v1 avec Upgrade WebSocket" });
+      };
+    } catch (error: any) {
+      window.clearTimeout(timeout);
+      resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "URL Realtime invalide", durationMs: Math.round(performance.now() - started), error: error?.message || String(error) });
+    }
+  });
 }
 
 export async function checkLocalBackendHealth(): Promise<LocalHealthReport> {
