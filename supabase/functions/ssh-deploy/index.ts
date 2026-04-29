@@ -943,6 +943,15 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
   const supaStudioPort = body.supabase_studio_port || "3001";
   const supaDbPort = body.supabase_db_port || "5432";
+  const requestedPorts = [
+    { label: "Application", value: appPort, required: true },
+    { label: "HTTPS application", value: httpsPort, required: enableHttps },
+    { label: "API Supabase/Kong", value: supaKongPort, required: installSupabase },
+    { label: "HTTPS Supabase/Kong", value: supaKongHttpsPort, required: installSupabase },
+    { label: "Studio Supabase", value: supaStudioPort, required: installSupabase },
+    { label: "Postgres", value: supaDbPort, required: installSupabase },
+  ];
+  validateDistinctPorts(requestedPorts.filter((port) => port.required));
   let supabaseUrlOverride = "";
   let supabaseAnonOverride = "";
   let supabaseProjectIdOverride = "";
@@ -965,6 +974,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
     try {
       const sudoPrefix = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S `;
       const preflight = await runRemotePreflight(conn, body, remoteDir, installSupabase, log);
+
+      if (installSupabase) {
+        await checkRemotePortsAvailable(conn, requestedPorts, log);
+      }
 
       if ((!preflight.dockerOk || !preflight.composeOk) && body.install_docker) {
         log("→ Installing Docker (this may take 1-3 minutes)…");
