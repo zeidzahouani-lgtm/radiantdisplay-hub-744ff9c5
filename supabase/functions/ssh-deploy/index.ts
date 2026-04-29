@@ -977,6 +977,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const httpsPort = body.https_port || "8443";
   const httpsDomain = (body.https_domain || body.host).trim();
   const installSupabase = !!body.install_supabase_local;
+  const forceFreshInstall = !!body.force_fresh_install;
   const supaKongPort = body.supabase_kong_http_port || "8000";
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
   const supaStudioPort = body.supabase_studio_port || "3001";
@@ -1013,9 +1014,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
       const sudoPrefix = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S `;
       const preflight = await runRemotePreflight(conn, body, remoteDir, installSupabase, log);
 
-      if (installSupabase) {
-        await checkRemotePortsAvailable(conn, requestedPorts, log);
-      }
+      const ignoredPortDirs = forceFreshInstall ? [`${remoteDir}/repo`, `${remoteDir}/supabase`] : [];
+      await checkRemotePortsAvailable(conn, requestedPorts, log, ignoredPortDirs);
 
       if ((!preflight.dockerOk || !preflight.composeOk) && body.install_docker) {
         log("→ Installing Docker (this may take 1-3 minutes)…");
@@ -1061,6 +1061,14 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         `test -f ${remoteDir}/supabase/docker-compose.yml && test -f ${remoteDir}/supabase/.env && echo EXISTS || echo NEW`,
       );
       const isExistingSupabase = supaDirCheck.stdout.includes("EXISTS");
+
+      if (forceFreshInstall && (isExistingInstall || isExistingSupabase)) {
+        await log(`⚠ Réinstallation complète demandée — arrêt et suppression de l'installation existante dans ${remoteDir}…`);
+        await exec(conn, `[ -f ${remoteDir}/repo/docker-compose.yml ] && (cd ${remoteDir}/repo && (docker compose down --remove-orphans 2>&1 || docker-compose down --remove-orphans 2>&1 || true)) || true`);
+        await exec(conn, `[ -f ${remoteDir}/supabase/docker-compose.yml ] && (cd ${remoteDir}/supabase && (docker compose down -v --remove-orphans 2>&1 || docker-compose down -v --remove-orphans 2>&1 || true)) || true`);
+        await exec(conn, `${sudoPrefix}rm -rf ${remoteDir}/repo ${remoteDir}/supabase`);
+        await log("✓ Ancienne installation supprimée — nouveau déploiement propre");
+      }
 
       if (isExistingInstall) {
         await log(`✓ Installation existante détectée dans ${remoteDir} — mode mise à jour activé`);
