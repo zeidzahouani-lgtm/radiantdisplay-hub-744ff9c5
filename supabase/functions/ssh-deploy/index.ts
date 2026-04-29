@@ -957,6 +957,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await log(`✓ Supabase local déjà installé dans ${remoteDir}/supabase — réutilisation de la configuration existante`);
       }
 
+      await ensureDeploymentBudget("installation/contrôle Supabase local");
+
       // ===== Optional: install self-hosted Supabase on the same server =====
       if (installSupabase && !isExistingSupabase) {
         const supaDir = `${remoteDir}/supabase`;
@@ -1064,6 +1066,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         (globalThis as any).__pendingLocalMigrations = { supaDir, postgresPw };
       }
 
+      await ensureDeploymentBudget("clone ou mise à jour du dépôt Git");
       log(`→ Preparing remote directory ${remoteDir}…`);
       // Ne jamais chown -R tout remoteDir ici : il contient aussi le volume Postgres local,
       // et un chown récursif casse global/pg_filenode.map. On ne touche qu'au dossier repo.
@@ -1102,6 +1105,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log("✓ Repo cloned");
       }
 
+      await ensureDeploymentBudget("migrations locales");
       // ===== Apply app migrations to local Supabase =====
       const pending = (globalThis as any).__pendingLocalMigrations;
       if (pending?.supaDir) {
@@ -1137,6 +1141,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
       }
 
 
+      await ensureDeploymentBudget("build Docker de l'application");
       // Generate Dockerfile, nginx.conf, docker-compose.yml inside the repo
       log("→ Writing Dockerfile, nginx.conf, docker-compose.yml…");
       const escEnv = (s: string) => (s || "").replace(/'/g, "'\\''");
