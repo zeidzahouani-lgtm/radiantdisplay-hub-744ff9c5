@@ -1047,6 +1047,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await syncSupabaseKongPorts(conn, supaDir, supaKongPort, supaKongHttpsPort, log);
         await syncLocalAuthSafeEnv(conn, supaDir, log);
         await startLocalSupabaseEssentials(conn, supaDir, log);
+        await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
         const supaBrowserUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
         supabaseUrlOverride = supaBrowserUrl;
         supabaseAnonOverride = anonKey;
@@ -1122,6 +1123,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log(applyMig.stdout.slice(-1500));
         log("✓ Migrations appliquées (les erreurs 'already exists' sont normales)");
         await syncLocalEdgeFunctions(conn, remoteDir, pending.supaDir, log);
+        if (supabaseAnonOverride) {
+          await ensureLocalApiServices(conn, pending.supaDir, supaKongPort, supabaseAnonOverride, log);
+        }
       }
 
 
