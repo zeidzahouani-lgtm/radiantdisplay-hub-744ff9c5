@@ -885,6 +885,12 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   let supabaseUrlOverride = "";
   let supabaseAnonOverride = "";
   let supabaseProjectIdOverride = "";
+  const deploymentDeadline = Date.now() + 13 * 60 * 1000;
+  const ensureDeploymentBudget = async (nextStep: string) => {
+    if (Date.now() <= deploymentDeadline) return;
+    await log(`⚠ Délai maximum atteint avant: ${nextStep}`);
+    throw new Error(`Déploiement interrompu proprement avant timeout. Dernière étape: ${nextStep}. Relancez le déploiement; les conteneurs déjà téléchargés seront réutilisés.`);
+  };
 
   let gitUrl = body.git_url.trim();
   if (body.git_token && /^https?:\/\//.test(gitUrl)) {
