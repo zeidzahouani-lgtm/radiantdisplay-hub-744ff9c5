@@ -326,7 +326,7 @@ print(f"OK removed={removed}")
   await exec(conn, `cd ${supaDir} && docker compose rm -sf kong 2>&1 || true`);
 }
 
-async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: (m: string) => Promise<void> | void) {
+async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: (m: string) => Promise<void> | void, skipPull = false) {
   // 0) Patcher le compose pour retirer la dépendance bloquante sur analytics
   await patchComposeRemoveAnalytics(conn, supaDir, log);
   await patchKongKeyauthCredentials(conn, supaDir, log);
@@ -340,8 +340,12 @@ async function startLocalSupabaseEssentials(conn: Client, supaDir: string, log: 
   await exec(conn, `cd ${supaDir} && docker compose stop analytics vector 2>&1 || true`);
   await exec(conn, `cd ${supaDir} && docker compose rm -f analytics vector 2>&1 || true`);
 
-  const pull = await exec(conn, `cd ${supaDir} && docker compose pull ${essentialServices} ${optionalServices} 2>&1 | tail -80 || true`);
-  await log((`${pull.stdout}${pull.stderr}`).slice(-1800));
+  if (skipPull) {
+    await log("✓ Images locales déjà présentes — pull Docker ignoré pour éviter un déploiement trop long.");
+  } else {
+    const pull = await exec(conn, `cd ${supaDir} && docker compose pull ${essentialServices} ${optionalServices} 2>&1 | tail -80 || true`);
+    await log((`${pull.stdout}${pull.stderr}`).slice(-1800));
+  }
 
   const upEssential = await exec(conn, `cd ${supaDir} && docker compose up -d ${essentialServices} 2>&1`);
   const essentialOutput = `${upEssential.stdout}${upEssential.stderr}`;
