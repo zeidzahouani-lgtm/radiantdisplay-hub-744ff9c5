@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Database, Download, Container, FileArchive, Loader2, Package, FileCode, Copy,
   Upload, CheckCircle2, XCircle, AlertCircle, ServerCog, Rocket, ShieldCheck,
-  Server, Terminal, Wifi, KeyRound,
+  Server, Terminal, Wifi, KeyRound, Trash2,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Textarea } from "@/components/ui/textarea";
@@ -191,6 +191,7 @@ export default function AdminBackup() {
   const [sshSupabaseProjectId, setSshSupabaseProjectId] = useState("");
   // Install local self-hosted Supabase on the same server
   const [sshInstallSupabaseLocal, setSshInstallSupabaseLocal] = useState(false);
+  const [sshForceFreshInstall, setSshForceFreshInstall] = useState(false);
   const [sshSupaKongPort, setSshSupaKongPort] = useState("8000");
   const [sshSupaStudioPort, setSshSupaStudioPort] = useState("3001");
   const [sshSupaDbPort, setSshSupaDbPort] = useState("5432");
@@ -819,6 +820,7 @@ To rebuild manually: docker compose up -d --build
           https_port: sshHttpsPort,
           https_domain: sshHttpsDomain.trim() || undefined,
           install_supabase_local: sshInstallSupabaseLocal,
+          force_fresh_install: sshForceFreshInstall,
           supabase_kong_http_port: sshSupaKongPort,
           supabase_studio_port: sshSupaStudioPort,
           supabase_db_port: sshSupaDbPort,
