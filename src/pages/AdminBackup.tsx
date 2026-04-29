@@ -198,6 +198,7 @@ export default function AdminBackup() {
   const [sshDeploying, setSshDeploying] = useState(false);
   const [sshLogs, setSshLogs] = useState<string[]>([]);
   const [sshDeployedUrl, setSshDeployedUrl] = useState<string | null>(null);
+  const [sshPortSuggestions, setSshPortSuggestions] = useState<Array<{ label: string; current: string; suggested: string }>>([]);
 
   const isValidPort = (value: string) => /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
   const validateSshPorts = () => {
@@ -218,6 +219,29 @@ export default function AdminBackup() {
       seen.set(port.value, port.label);
     }
     return null;
+  };
+  const applySshPortSuggestions = () => {
+    sshPortSuggestions.forEach((item) => {
+      if (item.label === "Application") setSshAppPort(item.suggested);
+      if (item.label === "HTTPS application") setSshHttpsPort(item.suggested);
+      if (item.label === "API Supabase/Kong") setSshSupaKongPort(item.suggested);
+      if (item.label === "HTTPS Supabase/Kong") return;
+      if (item.label === "Studio Supabase") setSshSupaStudioPort(item.suggested);
+      if (item.label === "Postgres") setSshSupaDbPort(item.suggested);
+    });
+    toast.success("Ports de rechange appliqués");
+  };
+  const captureSshPortSuggestions = (message: string) => {
+    const marker = "__PORT_SUGGESTIONS__";
+    const index = message.indexOf(marker);
+    if (index === -1) return message;
+    try {
+      const suggestions = JSON.parse(message.slice(index + marker.length));
+      if (Array.isArray(suggestions)) setSshPortSuggestions(suggestions.filter((item) => item?.label && item?.suggested));
+    } catch {
+      // Ignore malformed diagnostic payloads and keep the readable error.
+    }
+    return message.slice(0, index).trim();
   };
 
   // ===== Persist SSH + local Supabase config in localStorage =====
@@ -767,6 +791,7 @@ To rebuild manually: docker compose up -d --build
     setSshLogs([]);
     setSshDeployedUrl(null);
     setSshLocalSupabaseInfo(null);
+    setSshPortSuggestions([]);
     try {
       setSshLogs(["🔐 Vérification de la session admin…"]);
       const accessToken = await getFreshAccessToken();
@@ -852,7 +877,8 @@ To rebuild manually: docker compose up -d --build
           return;
         }
         if (parsed.status === "error") {
-          toast.error("Échec du déploiement: " + (parsed.error || "inconnu"));
+          const cleanError = captureSshPortSuggestions(parsed.error || "inconnu");
+          toast.error("Échec du déploiement: " + cleanError);
           return;
         }
         if (Date.now() - lastProgressAt > 3 * 60 * 1000) {
@@ -865,8 +891,9 @@ To rebuild manually: docker compose up -d --build
       setSshLogs(prev => [...prev, "✗ Délai maximum dépassé sans résultat final."]);
       toast.warning("Le déploiement prend plus de 30 min — consultez les logs serveur.");
     } catch (e: any) {
-      setSshLogs(prev => [...prev, "✗ Erreur: " + (e?.message || String(e))]);
-      toast.error("Erreur: " + (e?.message || String(e)));
+      const cleanError = captureSshPortSuggestions(e?.message || String(e));
+      setSshLogs(prev => [...prev, "✗ Erreur: " + cleanError]);
+      toast.error("Erreur: " + cleanError);
     } finally {
       setSshDeploying(false);
     }
@@ -1555,6 +1582,24 @@ To rebuild manually: docker compose up -d --build
                             La structure (tables, RLS, fonctions) doit ensuite être appliquée via l'onglet <strong>Sauvegarde / Restauration</strong>.
                           </AlertDescription>
                         </Alert>
+                        {sshPortSuggestions.length > 0 && (
+                          <Alert className="md:col-span-3 border-primary/30 bg-primary/5">
+                            <Wifi className="h-4 w-4" />
+                            <AlertTitle>Ports libres proposés</AlertTitle>
+                            <AlertDescription className="space-y-2 text-xs">
+                              <div className="flex flex-wrap gap-2">
+                                {sshPortSuggestions.map((item) => (
+                                  <Badge key={`${item.label}-${item.current}`} variant="outline">
+                                    {item.label}: {item.current} → {item.suggested}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <Button type="button" size="sm" variant="secondary" onClick={applySshPortSuggestions} disabled={sshDeploying} className="gap-2">
+                                <CheckCircle2 className="h-3.5 w-3.5" />Appliquer tous les ports proposés
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        )}
                       </div>
                     ) : (
                       <>
