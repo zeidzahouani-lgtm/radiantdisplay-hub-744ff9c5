@@ -1582,6 +1582,24 @@ To rebuild manually: docker compose up -d --build
                             La structure (tables, RLS, fonctions) doit ensuite être appliquée via l'onglet <strong>Sauvegarde / Restauration</strong>.
                           </AlertDescription>
                         </Alert>
+                        {sshPortSuggestions.length > 0 && (
+                          <Alert className="md:col-span-3 border-primary/30 bg-primary/5">
+                            <Wifi className="h-4 w-4" />
+                            <AlertTitle>Ports libres proposés</AlertTitle>
+                            <AlertDescription className="space-y-2 text-xs">
+                              <div className="flex flex-wrap gap-2">
+                                {sshPortSuggestions.map((item) => (
+                                  <Badge key={`${item.label}-${item.current}`} variant="outline">
+                                    {item.label}: {item.current} → {item.suggested}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <Button type="button" size="sm" variant="secondary" onClick={applySshPortSuggestions} disabled={sshDeploying} className="gap-2">
+                                <CheckCircle2 className="h-3.5 w-3.5" />Appliquer tous les ports proposés
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        )}
                       </div>
                     ) : (
                       <>
