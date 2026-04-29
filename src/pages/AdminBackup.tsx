@@ -801,7 +801,15 @@ To rebuild manually: docker compose up -d --build
           .select("value")
           .eq("key", settingsKey)
           .maybeSingle();
-        if (!row?.value) continue;
+        if (!row?.value) {
+          if (Date.now() - lastProgressAt > 3 * 60 * 1000) {
+            const msg = "✗ Aucun statut reçu depuis 3 min : le job distant n'a pas pu écrire son résultat. Vérifiez la connexion puis relancez le déploiement.";
+            setSshLogs(prev => [...prev, msg]);
+            toast.error("Aucun résultat reçu — relancez le déploiement.");
+            return;
+          }
+          continue;
+        }
         let parsed: any;
         try { parsed = JSON.parse(row.value as string); } catch { continue; }
 
