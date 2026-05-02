@@ -4,7 +4,7 @@ import { Outlet } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useEstablishmentBranding } from "@/hooks/useEstablishmentBranding";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LocalMaintenanceBanner } from "@/components/LocalMaintenanceBanner";
