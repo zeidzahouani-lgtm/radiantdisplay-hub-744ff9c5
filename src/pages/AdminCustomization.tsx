@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Palette, Type, Image, Globe, Save, RotateCcw, Upload, Bot, Eye, EyeOff, BarChart3, Zap, CheckCircle, XCircle, Loader2, Monitor, Clock } from "lucide-react";
+import { Palette, Type, Image, Globe, Save, RotateCcw, Upload, Bot, Eye, EyeOff, BarChart3, Zap, CheckCircle, XCircle, Loader2, Monitor, Clock, Sun, Moon, Sparkles } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -48,6 +49,7 @@ const providerDisplayNames: Record<string, string> = {
 };
 
 export default function AdminCustomization() {
+  const { theme, setTheme } = useTheme();
   const { settings, updateSetting } = useAppSettings();
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
@@ -241,6 +243,87 @@ export default function AdminCustomization() {
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Titre de la page (onglet navigateur)</Label>
               <Input value={form.page_title} onChange={(e) => setForm({ ...form, page_title: e.target.value })} placeholder="SignageOS — Digital Signage CMS" />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Theme selector */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Sparkles className="h-4 w-4 text-primary icon-neon" />
+              Thème de l'interface
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                {
+                  id: "light" as const,
+                  label: "Clair",
+                  desc: "Lumineux et minimaliste",
+                  icon: Sun,
+                  preview: "linear-gradient(135deg, hsl(220 20% 97%), hsl(0 0% 100%))",
+                  dot: "hsl(210 85% 50%)",
+                  text: "hsl(220 30% 12%)",
+                },
+                {
+                  id: "dark" as const,
+                  label: "Sombre",
+                  desc: "Élégant et reposant",
+                  icon: Moon,
+                  preview: "linear-gradient(135deg, hsl(225 30% 8%), hsl(228 32% 6%))",
+                  dot: "hsl(210 85% 62%)",
+                  text: "hsl(220 15% 92%)",
+                },
+                {
+                  id: "neon" as const,
+                  label: "Néon",
+                  desc: "Noir profond, vert néon",
+                  icon: Zap,
+                  preview: "radial-gradient(circle at 30% 20%, hsl(142 100% 50% / 0.25), transparent 60%), linear-gradient(160deg, hsl(150 15% 4%), hsl(150 20% 3%))",
+                  dot: "hsl(142 100% 50%)",
+                  text: "hsl(140 60% 92%)",
+                  glow: true,
+                },
+              ].map((opt) => {
+                const Icon = opt.icon;
+                const active = theme === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => { setTheme(opt.id); toast.success(`Thème "${opt.label}" activé`); }}
+                    className={`group relative rounded-xl border-2 p-4 text-left transition-all overflow-hidden ${
+                      active ? "border-primary shadow-lg" : "border-border hover:border-primary/50"
+                    }`}
+                    style={{ background: opt.preview }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div
+                        className="h-9 w-9 rounded-lg flex items-center justify-center"
+                        style={{
+                          background: opt.dot,
+                          boxShadow: opt.glow ? `0 0 16px ${opt.dot}` : "none",
+                        }}
+                      >
+                        <Icon className="h-4 w-4" style={{ color: opt.id === "light" ? "white" : opt.id === "neon" ? "#000" : "white" }} />
+                      </div>
+                      {active && (
+                        <CheckCircle className="h-5 w-5" style={{ color: opt.dot, filter: opt.glow ? `drop-shadow(0 0 6px ${opt.dot})` : "none" }} />
+                      )}
+                    </div>
+                    <div className="font-semibold text-sm" style={{ color: opt.text, textShadow: opt.glow ? `0 0 8px ${opt.dot}` : "none" }}>
+                      {opt.label}
+                    </div>
+                    <div className="text-xs mt-1 opacity-75" style={{ color: opt.text }}>
+                      {opt.desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-muted-foreground normal-case mt-3">
+              Le thème est appliqué immédiatement et mémorisé sur cet appareil. Vous pouvez aussi basculer rapidement via l'icône en haut à droite.
+            </p>
           </CardContent>
         </Card>
 

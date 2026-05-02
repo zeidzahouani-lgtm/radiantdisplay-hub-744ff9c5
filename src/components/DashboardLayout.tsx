@@ -4,7 +4,7 @@ import { Outlet } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useEstablishmentBranding } from "@/hooks/useEstablishmentBranding";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LocalMaintenanceBanner } from "@/components/LocalMaintenanceBanner";
@@ -29,7 +29,7 @@ export function DashboardLayout() {
                 onClick={toggleTheme}
                 className="h-8 w-8 text-muted-foreground hover:text-primary"
               >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : theme === "light" ? <Zap className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <NotificationBell />
             </div>
