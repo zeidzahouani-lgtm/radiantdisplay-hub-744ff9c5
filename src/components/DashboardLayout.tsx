@@ -29,7 +29,7 @@ export function DashboardLayout() {
                 onClick={toggleTheme}
                 className="h-8 w-8 text-muted-foreground hover:text-primary"
               >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : theme === "light" ? <Zap className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <NotificationBell />
             </div>
