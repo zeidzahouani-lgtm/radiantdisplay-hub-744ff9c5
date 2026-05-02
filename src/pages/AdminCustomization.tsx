@@ -49,6 +49,7 @@ const providerDisplayNames: Record<string, string> = {
 };
 
 export default function AdminCustomization() {
+  const { theme, setTheme } = useTheme();
   const { settings, updateSetting } = useAppSettings();
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
