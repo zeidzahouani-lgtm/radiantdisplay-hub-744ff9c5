@@ -40,6 +40,28 @@ interface DeployBody {
   supabase_kong_http_port?: string;   // public REST/Auth gateway (default 8000)
   supabase_studio_port?: string;      // Supabase Studio UI (default 3000)
   supabase_db_port?: string;          // Postgres (default 5432)
+  // Database stack choice
+  // - "supabase_full" (default): full Supabase stack (Postgres + Auth + Storage + Realtime + Functions). Required for the app frontend to work.
+  // - "postgres_only": deploy a standalone Postgres container only. App frontend will NOT work (no Auth/Storage/Realtime). Useful for external scripts.
+  db_stack?: "supabase_full" | "postgres_only";
+  // Postgres image variant (used by both modes). Allowed values are validated server-side.
+  postgres_image?: string;            // e.g. "postgres:15", "postgres:16", "postgres:17", "postgres:15-alpine", "timescale/timescaledb:latest-pg16"
+}
+
+const ALLOWED_PG_IMAGES = new Set([
+  "postgres:15",
+  "postgres:15-alpine",
+  "postgres:16",
+  "postgres:16-alpine",
+  "postgres:17",
+  "postgres:17-alpine",
+  "timescale/timescaledb:latest-pg15",
+  "timescale/timescaledb:latest-pg16",
+]);
+function resolvePostgresImage(img?: string): string {
+  const v = (img || "").trim();
+  if (v && ALLOWED_PG_IMAGES.has(v)) return v;
+  return "postgres:15";
 }
 
 function ssh(opts: { host: string; port: number; username: string; password: string }): Promise<Client> {
@@ -976,7 +998,12 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const enableHttps = !!body.enable_https;
   const httpsPort = body.https_port || "8443";
   const httpsDomain = (body.https_domain || body.host).trim();
-  const installSupabase = !!body.install_supabase_local;
+  const dbStack = body.db_stack === "postgres_only" ? "postgres_only" : "supabase_full";
+  const postgresImage = resolvePostgresImage(body.postgres_image);
+  // "Install Supabase local" is forced ON when stack is full and the toggle was passed
+  // For postgres_only, we deploy our OWN simple postgres container (no full Supabase stack).
+  const installSupabase = !!body.install_supabase_local && dbStack === "supabase_full";
+  const installPostgresOnly = !!body.install_supabase_local && dbStack === "postgres_only";
   const forceFreshInstall = !!body.force_fresh_install;
   const supaKongPort = body.supabase_kong_http_port || "8000";
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
@@ -988,7 +1015,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
     { label: "API Supabase/Kong", value: supaKongPort, required: installSupabase },
     { label: "HTTPS Supabase/Kong", value: supaKongHttpsPort, required: installSupabase },
     { label: "Studio Supabase", value: supaStudioPort, required: installSupabase },
-    { label: "Postgres", value: supaDbPort, required: installSupabase },
+    { label: "Postgres", value: supaDbPort, required: installSupabase || installPostgresOnly },
   ];
   validateDistinctPorts(requestedPorts.filter((port) => port.required));
   let supabaseUrlOverride = "";
@@ -1157,7 +1184,67 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         (globalThis as any).__pendingLocalMigrations = { supaDir, postgresPw: postgresPw };
       }
 
-      // ===== Existing Supabase: extract keys from existing .env and ensure containers are up =====
+      // ===== Standalone Postgres (no full Supabase stack) =====
+      if (installPostgresOnly) {
+        const pgDir = `${remoteDir}/postgres`;
+        await log(`→ Déploiement Postgres standalone (image: ${postgresImage})…`);
+        await log(`⚠ ATTENTION: l'application frontend (Auth, Storage, Realtime, Edge Functions) NE FONCTIONNERA PAS avec ce mode.`);
+        await log(`  Cette option n'est utile que si vous avez besoin d'une base Postgres pour des scripts/outils externes.`);
+        await exec(conn, `${sudoPrefix}mkdir -p ${pgDir} && ${sudoPrefix}chown -R ${body.username}:${body.username} ${pgDir}`);
+
+        const randHex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        const postgresPw = randHex(32);
+
+        const composeYaml = [
+          `services:`,
+          `  db:`,
+          `    image: ${postgresImage}`,
+          `    container_name: screenflow_postgres`,
+          `    restart: unless-stopped`,
+          `    environment:`,
+          `      POSTGRES_PASSWORD: ${postgresPw}`,
+          `      POSTGRES_USER: postgres`,
+          `      POSTGRES_DB: postgres`,
+          `    ports:`,
+          `      - "${supaDbPort}:5432"`,
+          `    volumes:`,
+          `      - ./data:/var/lib/postgresql/data`,
+          `    healthcheck:`,
+          `      test: ["CMD-SHELL", "pg_isready -U postgres"]`,
+          `      interval: 5s`,
+          `      timeout: 5s`,
+          `      retries: 10`,
+          ``,
+        ].join("\n");
+        const composeB64 = btoa(composeYaml);
+        await exec(conn, `cd ${pgDir} && echo "${composeB64}" | base64 -d > docker-compose.yml`);
+
+        const upPg = await exec(conn, `cd ${pgDir} && (docker compose up -d || docker-compose up -d) 2>&1`);
+        await log(upPg.stdout.slice(-1500));
+        if (upPg.code !== 0) throw new Error("Échec démarrage Postgres standalone: " + upPg.stderr.slice(-300));
+
+        // Wait for healthcheck
+        await log("→ Attente que Postgres soit prêt…");
+        let pgReady = false;
+        for (let i = 0; i < 30; i++) {
+          const ready = await exec(conn, `docker exec screenflow_postgres pg_isready -U postgres 2>&1 || true`);
+          if (/accepting connections/i.test(ready.stdout)) { pgReady = true; break; }
+          await new Promise(r => setTimeout(r, 2000));
+        }
+        if (!pgReady) await log("⚠ Postgres ne répond pas après 60s, continuation quand même");
+        else await log("✓ Postgres prêt");
+
+        // Connectivity test
+        const pingTest = await exec(conn, `docker exec screenflow_postgres psql -U postgres -d postgres -c "SELECT version();" 2>&1 || true`);
+        await log("• Test SQL: " + (pingTest.stdout || pingTest.stderr).slice(-400));
+
+        await log(`✓ Postgres standalone démarré`);
+        await log(`  • Image:      ${postgresImage}`);
+        await log(`  • Connexion:  postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
+        await log(`  • Mot de passe: ${postgresPw}  (notez-le, il ne sera pas réaffiché)`);
+        (globalThis as any).__pgOnlyResult = { image: postgresImage, port: supaDbPort, password: postgresPw, host: body.host };
+      }
+
       if (installSupabase && isExistingSupabase) {
         const supaDir = `${remoteDir}/supabase`;
         const envRead = await exec(
@@ -1396,17 +1483,56 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     const ps = await exec(conn, `cd ${remoteDir}/repo && (docker compose ps || docker-compose ps)`);
     await log(ps.stdout);
 
+    // ===== Connectivity report =====
+    const connectivity: Record<string, { ok: boolean; detail: string }> = {};
+    await log("→ Test de connectivité de la stack déployée…");
+
+    // App health
+    const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
+    const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${appUrl} || echo FAIL`);
+    const appCode = appCheck.stdout.trim();
+    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${appUrl}` };
+    await log(`  • App         : ${connectivity.app.ok ? "✓" : "✗"} ${connectivity.app.detail}`);
+
+    if (installSupabase) {
+      // REST
+      const restCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "apikey: ${supabaseAnonOverride}" "http://127.0.0.1:${supaKongPort}/rest/v1/" || echo FAIL`);
+      connectivity.rest = { ok: /^(200|401|404)$/.test(restCheck.stdout.trim()), detail: `HTTP ${restCheck.stdout.trim()} sur Kong /rest/v1/` };
+      const authCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "http://127.0.0.1:${supaKongPort}/auth/v1/health" || echo FAIL`);
+      connectivity.auth = { ok: /^(200|404)$/.test(authCheck.stdout.trim()), detail: `HTTP ${authCheck.stdout.trim()} sur /auth/v1/health` };
+      const storageCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "apikey: ${supabaseAnonOverride}" "http://127.0.0.1:${supaKongPort}/storage/v1/bucket" || echo FAIL`);
+      connectivity.storage = { ok: /^(200|401|403|404)$/.test(storageCheck.stdout.trim()), detail: `HTTP ${storageCheck.stdout.trim()} sur /storage/v1/bucket` };
+      // Postgres direct
+      const pgCheck = await exec(conn, `(cd ${remoteDir}/supabase && docker compose exec -T --user postgres db pg_isready -h 127.0.0.1 -U postgres 2>&1) || echo FAIL`);
+      connectivity.postgres = { ok: /accepting connections/i.test(pgCheck.stdout), detail: pgCheck.stdout.trim().slice(-120) };
+      await log(`  • Supabase REST    : ${connectivity.rest.ok ? "✓" : "✗"} ${connectivity.rest.detail}`);
+      await log(`  • Supabase Auth    : ${connectivity.auth.ok ? "✓" : "✗"} ${connectivity.auth.detail}`);
+      await log(`  • Supabase Storage : ${connectivity.storage.ok ? "✓" : "✗"} ${connectivity.storage.detail}`);
+      await log(`  • Postgres         : ${connectivity.postgres.ok ? "✓" : "✗"} ${connectivity.postgres.detail}`);
+    }
+
+    if (installPostgresOnly) {
+      const pgCheck = await exec(conn, `docker exec screenflow_postgres pg_isready -U postgres 2>&1 || echo FAIL`);
+      connectivity.postgres = { ok: /accepting connections/i.test(pgCheck.stdout), detail: pgCheck.stdout.trim().slice(-120) };
+      await log(`  • Postgres standalone : ${connectivity.postgres.ok ? "✓" : "✗"} ${connectivity.postgres.detail}`);
+    }
+
     conn.end();
-    const url = enableHttps ? `https://${body.host}:${httpsPort}` : `http://${body.host}:${appPort}`;
+    const url = appUrl;
     await log(`🚀 Deployment complete — accessible at ${url}`);
 
+    const pgOnly = (globalThis as any).__pgOnlyResult || null;
     (globalThis as any).__lastDeployResult = {
       url,
+      db_stack: dbStack,
+      postgres_image: (installSupabase || installPostgresOnly) ? postgresImage : null,
+      connectivity,
       supabase_local: installSupabase ? {
         url: supabaseUrlOverride,
         anon_key: supabaseAnonOverride,
         studio_url: `http://${body.host}:${supaStudioPort}`,
       } : null,
+      postgres_only: pgOnly,
     };
   } catch (innerErr: any) {
     try { conn.end(); } catch (_) {}
