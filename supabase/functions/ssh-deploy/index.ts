@@ -1015,7 +1015,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
     { label: "API Supabase/Kong", value: supaKongPort, required: installSupabase },
     { label: "HTTPS Supabase/Kong", value: supaKongHttpsPort, required: installSupabase },
     { label: "Studio Supabase", value: supaStudioPort, required: installSupabase },
-    { label: "Postgres", value: supaDbPort, required: installSupabase },
+    { label: "Postgres", value: supaDbPort, required: installSupabase || installPostgresOnly },
   ];
   validateDistinctPorts(requestedPorts.filter((port) => port.required));
   let supabaseUrlOverride = "";
