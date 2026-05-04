@@ -1483,17 +1483,56 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     const ps = await exec(conn, `cd ${remoteDir}/repo && (docker compose ps || docker-compose ps)`);
     await log(ps.stdout);
 
+    // ===== Connectivity report =====
+    const connectivity: Record<string, { ok: boolean; detail: string }> = {};
+    await log("→ Test de connectivité de la stack déployée…");
+
+    // App health
+    const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
+    const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${appUrl} || echo FAIL`);
+    const appCode = appCheck.stdout.trim();
+    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${appUrl}` };
+    await log(`  • App         : ${connectivity.app.ok ? "✓" : "✗"} ${connectivity.app.detail}`);
+
+    if (installSupabase) {
+      // REST
+      const restCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "apikey: ${supabaseAnonOverride}" "http://127.0.0.1:${supaKongPort}/rest/v1/" || echo FAIL`);
+      connectivity.rest = { ok: /^(200|401|404)$/.test(restCheck.stdout.trim()), detail: `HTTP ${restCheck.stdout.trim()} sur Kong /rest/v1/` };
+      const authCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "http://127.0.0.1:${supaKongPort}/auth/v1/health" || echo FAIL`);
+      connectivity.auth = { ok: /^(200|404)$/.test(authCheck.stdout.trim()), detail: `HTTP ${authCheck.stdout.trim()} sur /auth/v1/health` };
+      const storageCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "apikey: ${supabaseAnonOverride}" "http://127.0.0.1:${supaKongPort}/storage/v1/bucket" || echo FAIL`);
+      connectivity.storage = { ok: /^(200|401|403|404)$/.test(storageCheck.stdout.trim()), detail: `HTTP ${storageCheck.stdout.trim()} sur /storage/v1/bucket` };
+      // Postgres direct
+      const pgCheck = await exec(conn, `(cd ${remoteDir}/supabase && docker compose exec -T --user postgres db pg_isready -h 127.0.0.1 -U postgres 2>&1) || echo FAIL`);
+      connectivity.postgres = { ok: /accepting connections/i.test(pgCheck.stdout), detail: pgCheck.stdout.trim().slice(-120) };
+      await log(`  • Supabase REST    : ${connectivity.rest.ok ? "✓" : "✗"} ${connectivity.rest.detail}`);
+      await log(`  • Supabase Auth    : ${connectivity.auth.ok ? "✓" : "✗"} ${connectivity.auth.detail}`);
+      await log(`  • Supabase Storage : ${connectivity.storage.ok ? "✓" : "✗"} ${connectivity.storage.detail}`);
+      await log(`  • Postgres         : ${connectivity.postgres.ok ? "✓" : "✗"} ${connectivity.postgres.detail}`);
+    }
+
+    if (installPostgresOnly) {
+      const pgCheck = await exec(conn, `docker exec screenflow_postgres pg_isready -U postgres 2>&1 || echo FAIL`);
+      connectivity.postgres = { ok: /accepting connections/i.test(pgCheck.stdout), detail: pgCheck.stdout.trim().slice(-120) };
+      await log(`  • Postgres standalone : ${connectivity.postgres.ok ? "✓" : "✗"} ${connectivity.postgres.detail}`);
+    }
+
     conn.end();
-    const url = enableHttps ? `https://${body.host}:${httpsPort}` : `http://${body.host}:${appPort}`;
+    const url = appUrl;
     await log(`🚀 Deployment complete — accessible at ${url}`);
 
+    const pgOnly = (globalThis as any).__pgOnlyResult || null;
     (globalThis as any).__lastDeployResult = {
       url,
+      db_stack: dbStack,
+      postgres_image: (installSupabase || installPostgresOnly) ? postgresImage : null,
+      connectivity,
       supabase_local: installSupabase ? {
         url: supabaseUrlOverride,
         anon_key: supabaseAnonOverride,
         studio_url: `http://${body.host}:${supaStudioPort}`,
       } : null,
+      postgres_only: pgOnly,
     };
   } catch (innerErr: any) {
     try { conn.end(); } catch (_) {}
