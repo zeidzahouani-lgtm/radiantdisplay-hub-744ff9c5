@@ -826,6 +826,8 @@ To rebuild manually: docker compose up -d --build
           supabase_kong_http_port: sshSupaKongPort,
           supabase_studio_port: sshSupaStudioPort,
           supabase_db_port: sshSupaDbPort,
+          db_stack: sshDbStack,
+          postgres_image: sshPostgresImage,
         },
       });
       if (error) throw error;
