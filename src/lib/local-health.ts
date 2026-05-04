@@ -39,6 +39,9 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 6000);
 
+  // Stratégie : tenter d'abord un fetch CORS standard avec apikey.
+  // Si CORS échoue (PostgREST/Kong pas configuré pour l'origine), retomber sur un
+  // ping no-cors qui prouve juste que le port répond, sans pouvoir lire le statut.
   try {
     const response = await fetch(check.url, {
       method: check.method,
@@ -47,10 +50,12 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       signal: controller.signal,
     });
 
+    // PostgREST/Kong renvoient typiquement 200/301/401/404 sur ces endpoints quand
+    // le service est sain. On considère KO uniquement les 5xx.
     const reachable = response.status > 0 && response.status < 500;
     const details = !reachable
       ? response.status === 503
-        ? "HTTP 503: la gateway/proxy répond, mais le service backend local derrière elle est indisponible ou pas démarré. Relancez le déploiement SSH avec backend local, ou redémarrez les conteneurs db/rest/storage/realtime/kong."
+        ? "HTTP 503: la gateway répond mais le service backend local est indisponible. Redémarrez les conteneurs db/rest/storage/realtime/kong."
         : `HTTP ${response.status}: ${response.statusText || "réponse non OK"}`
       : null;
     return {
@@ -64,6 +69,38 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       details,
     };
   } catch (error: any) {
+    const isAbort = error?.name === "AbortError";
+    // Fallback no-cors : si le port est bien ouvert mais que CORS bloque la réponse,
+    // un fetch no-cors résout (status=0, type=opaque) et prouve la joignabilité.
+    if (!isAbort) {
+      try {
+        const fallbackController = new AbortController();
+        const fallbackTimeout = window.setTimeout(() => fallbackController.abort(), 4000);
+        const opaque = await fetch(check.url, {
+          method: "GET",
+          mode: "no-cors",
+          cache: "no-store",
+          signal: fallbackController.signal,
+        });
+        window.clearTimeout(fallbackTimeout);
+        // type === "opaque" => le serveur a répondu, mais le navigateur masque le contenu.
+        if (opaque.type === "opaque" || opaque.type === "opaqueredirect") {
+          return {
+            ...check,
+            ok: true,
+            reachable: true,
+            status: 0,
+            statusText: "Réponse opaque (CORS)",
+            durationMs: Math.round(performance.now() - started),
+            error: null,
+            details:
+              "Service joignable mais CORS non configuré pour cette origine. Le service répond, ajoutez l'origine de l'app dans les CORS Kong/PostgREST pour des tests détaillés.",
+          };
+        }
+      } catch {
+        // ignore, on retombe sur le KO réseau classique
+      }
+    }
     return {
       ...check,
       ok: false,
@@ -71,8 +108,8 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       status: null,
       statusText: "Aucune réponse",
       durationMs: Math.round(performance.now() - started),
-      error: error?.name === "AbortError" ? "Timeout après 6s" : error?.message || String(error),
-      details: "Aucune réponse HTTP: URL inaccessible, DNS/SSL incorrect, port fermé ou proxy nginx non joignable.",
+      error: isAbort ? "Timeout après 6s" : error?.message || String(error),
+      details: "Aucune réponse HTTP: URL inaccessible, DNS/SSL incorrect, port fermé, mixed-content (HTTPS→HTTP) ou proxy nginx non joignable.",
     };
   } finally {
     window.clearTimeout(timeout);
