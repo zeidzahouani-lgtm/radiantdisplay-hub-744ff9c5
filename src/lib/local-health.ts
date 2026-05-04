@@ -14,6 +14,8 @@ export type LocalHealthCheck = {
   durationMs: number;
   error: string | null;
   details?: string | null;
+  corsBlocked?: boolean;
+  hint?: string | null;
 };
 
 export type LocalHealthReport = {
