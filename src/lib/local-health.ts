@@ -209,13 +209,36 @@ export async function checkLocalBackendHealth(baseUrl = getSupabaseUrl()): Promi
 export function getLocalBackendCandidates() {
   const configured = getSupabaseUrl();
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return Array.from(new Set([
-    configured,
-    origin,
-    origin.replace(/:8443$/, ":8000").replace(/:8080$/, ":8000"),
-    `${window.location.protocol}//${window.location.hostname}:8000`,
-    `${window.location.protocol}//${window.location.hostname}:8080`,
-  ].filter((url) => /^https?:\/\/.+/.test(url))));
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const pageProto = typeof window !== "undefined" ? window.location.protocol : "https:";
+
+  const hosts = new Set<string>();
+  try { if (configured) hosts.add(new URL(configured).hostname); } catch { /* ignore */ }
+  if (hostname) hosts.add(hostname);
+  hosts.add("screenflow.ds");
+
+  // Mapping port → protocole naturel Supabase self-hosted :
+  //  8443 = HTTPS Kong TLS · 8000 = HTTP Kong · 8080 = HTTP app/nginx
+  const portsWithProto: Array<{ port: string; proto: "http" | "https" }> = [
+    { port: "8443", proto: "https" },
+    { port: "8000", proto: "http" },
+    { port: "8080", proto: "http" },
+  ];
+
+  const candidates = new Set<string>();
+  if (configured) candidates.add(configured.replace(/\/$/, ""));
+  if (origin) candidates.add(origin.replace(/\/$/, ""));
+
+  for (const host of hosts) {
+    if (!host) continue;
+    for (const { port, proto } of portsWithProto) {
+      // On n'ajoute du HTTP que si la page est en HTTP (sinon mixed-content garanti).
+      if (proto === "http" && pageProto === "https:") continue;
+      candidates.add(`${proto}://${host}:${port}`);
+    }
+  }
+
+  return Array.from(candidates).filter((url) => /^https?:\/\/.+/.test(url));
 }
 
 export async function discoverLocalBackends(): Promise<LocalBackendCandidate[]> {
