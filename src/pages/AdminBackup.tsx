@@ -1666,6 +1666,7 @@ To rebuild manually: docker compose up -d --build
                             </AlertDescription>
                           </Alert>
                         )}
+                        </div>
                       </div>
                     ) : (
                       <>
