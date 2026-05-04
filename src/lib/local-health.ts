@@ -131,32 +131,52 @@ async function runRealtimeCheck(baseUrl: string): Promise<LocalHealthCheck> {
   realtimeUrl.searchParams.set("apikey", key);
   realtimeUrl.searchParams.set("vsn", "1.0.0");
 
+  // Fallback HTTP : si le WebSocket échoue (cert auto-signé, mixed-content, CORS upgrade),
+  // on tente un GET no-cors sur /realtime/v1/ pour prouver que le port répond.
+  const httpProbeUrl = `${baseUrl.replace(/\/$/, "")}/realtime/v1/`;
+  const httpProbe = async (): Promise<LocalHealthCheck | null> => {
+    try {
+      const ctrl = new AbortController();
+      const t = window.setTimeout(() => ctrl.abort(), 4000);
+      const opaque = await fetch(httpProbeUrl, { method: "GET", mode: "no-cors", cache: "no-store", signal: ctrl.signal });
+      window.clearTimeout(t);
+      if (opaque.type === "opaque" || opaque.type === "opaqueredirect") {
+        return {
+          name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET",
+          ok: true, reachable: true, status: 0, statusText: "Service joignable (probe HTTP)",
+          durationMs: Math.round(performance.now() - started), error: null,
+          details: "Le port Realtime répond mais le WebSocket n'a pas pu s'établir (certificat auto-signé, mixed-content HTTPS→HTTP ou proxy sans Upgrade).",
+          corsBlocked: true,
+          hint: "Vérifiez le proxy nginx/Kong: 'proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection \"upgrade\";' et acceptez le certificat dans le navigateur.",
+        };
+      }
+    } catch { /* ignore */ }
+    return null;
+  };
+
   return new Promise((resolve) => {
     let settled = false;
-    const timeout = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "Timeout WebSocket", durationMs: Math.round(performance.now() - started), error: "Connexion WebSocket impossible après 6s" });
+    const finish = (r: LocalHealthCheck) => { if (!settled) { settled = true; resolve(r); } };
+    const timeout = window.setTimeout(async () => {
+      const probe = await httpProbe();
+      finish(probe ?? { name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "Timeout WebSocket", durationMs: Math.round(performance.now() - started), error: "Connexion WebSocket impossible après 6s", details: "Aucune réponse WebSocket en 6s. Cause probable : certificat HTTPS auto-signé non accepté, ou proxy sans support Upgrade.", corsBlocked: false, hint: "Ouvrez l'URL HTTPS du backend dans un onglet et acceptez le certificat, puis relancez le test." });
     }, 6000);
 
     try {
       const socket = new WebSocket(realtimeUrl.toString());
       socket.onopen = () => {
-        if (settled) return;
-        settled = true;
         window.clearTimeout(timeout);
         socket.close();
-        resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: true, reachable: true, status: 101, statusText: "WebSocket connecté", durationMs: Math.round(performance.now() - started), error: null });
+        finish({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: true, reachable: true, status: 101, statusText: "WebSocket connecté", durationMs: Math.round(performance.now() - started), error: null });
       };
-      socket.onerror = () => {
-        if (settled) return;
-        settled = true;
+      socket.onerror = async () => {
         window.clearTimeout(timeout);
-        resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "Erreur WebSocket", durationMs: Math.round(performance.now() - started), error: "Vérifiez le proxy /realtime/v1 avec Upgrade WebSocket" });
+        const probe = await httpProbe();
+        finish(probe ?? { name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "Erreur WebSocket", durationMs: Math.round(performance.now() - started), error: "Vérifiez le proxy /realtime/v1 avec Upgrade WebSocket", details: "Le navigateur n'a pas pu établir le WebSocket (certificat auto-signé, mixed-content ou proxy sans Upgrade).", corsBlocked: false, hint: "Acceptez le certificat HTTPS du backend dans un nouvel onglet, puis vérifiez la config proxy Upgrade/Connection." });
       };
     } catch (error: any) {
       window.clearTimeout(timeout);
-      resolve({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "URL Realtime invalide", durationMs: Math.round(performance.now() - started), error: error?.message || String(error) });
+      finish({ name: "realtime", label: "Realtime WebSocket", url: realtimeUrl.toString(), method: "GET", ok: false, reachable: false, status: null, statusText: "URL Realtime invalide", durationMs: Math.round(performance.now() - started), error: error?.message || String(error) });
     }
   });
 }
