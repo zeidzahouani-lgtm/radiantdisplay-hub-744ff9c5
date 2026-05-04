@@ -1184,7 +1184,67 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         (globalThis as any).__pendingLocalMigrations = { supaDir, postgresPw: postgresPw };
       }
 
-      // ===== Existing Supabase: extract keys from existing .env and ensure containers are up =====
+      // ===== Standalone Postgres (no full Supabase stack) =====
+      if (installPostgresOnly) {
+        const pgDir = `${remoteDir}/postgres`;
+        await log(`→ Déploiement Postgres standalone (image: ${postgresImage})…`);
+        await log(`⚠ ATTENTION: l'application frontend (Auth, Storage, Realtime, Edge Functions) NE FONCTIONNERA PAS avec ce mode.`);
+        await log(`  Cette option n'est utile que si vous avez besoin d'une base Postgres pour des scripts/outils externes.`);
+        await exec(conn, `${sudoPrefix}mkdir -p ${pgDir} && ${sudoPrefix}chown -R ${body.username}:${body.username} ${pgDir}`);
+
+        const randHex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        const postgresPw = randHex(32);
+
+        const composeYaml = [
+          `services:`,
+          `  db:`,
+          `    image: ${postgresImage}`,
+          `    container_name: screenflow_postgres`,
+          `    restart: unless-stopped`,
+          `    environment:`,
+          `      POSTGRES_PASSWORD: ${postgresPw}`,
+          `      POSTGRES_USER: postgres`,
+          `      POSTGRES_DB: postgres`,
+          `    ports:`,
+          `      - "${supaDbPort}:5432"`,
+          `    volumes:`,
+          `      - ./data:/var/lib/postgresql/data`,
+          `    healthcheck:`,
+          `      test: ["CMD-SHELL", "pg_isready -U postgres"]`,
+          `      interval: 5s`,
+          `      timeout: 5s`,
+          `      retries: 10`,
+          ``,
+        ].join("\n");
+        const composeB64 = btoa(composeYaml);
+        await exec(conn, `cd ${pgDir} && echo "${composeB64}" | base64 -d > docker-compose.yml`);
+
+        const upPg = await exec(conn, `cd ${pgDir} && (docker compose up -d || docker-compose up -d) 2>&1`);
+        await log(upPg.stdout.slice(-1500));
+        if (upPg.code !== 0) throw new Error("Échec démarrage Postgres standalone: " + upPg.stderr.slice(-300));
+
+        // Wait for healthcheck
+        await log("→ Attente que Postgres soit prêt…");
+        let pgReady = false;
+        for (let i = 0; i < 30; i++) {
+          const ready = await exec(conn, `docker exec screenflow_postgres pg_isready -U postgres 2>&1 || true`);
+          if (/accepting connections/i.test(ready.stdout)) { pgReady = true; break; }
+          await new Promise(r => setTimeout(r, 2000));
+        }
+        if (!pgReady) await log("⚠ Postgres ne répond pas après 60s, continuation quand même");
+        else await log("✓ Postgres prêt");
+
+        // Connectivity test
+        const pingTest = await exec(conn, `docker exec screenflow_postgres psql -U postgres -d postgres -c "SELECT version();" 2>&1 || true`);
+        await log("• Test SQL: " + (pingTest.stdout || pingTest.stderr).slice(-400));
+
+        await log(`✓ Postgres standalone démarré`);
+        await log(`  • Image:      ${postgresImage}`);
+        await log(`  • Connexion:  postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
+        await log(`  • Mot de passe: ${postgresPw}  (notez-le, il ne sera pas réaffiché)`);
+        (globalThis as any).__pgOnlyResult = { image: postgresImage, port: supaDbPort, password: postgresPw, host: body.host };
+      }
+
       if (installSupabase && isExistingSupabase) {
         const supaDir = `${remoteDir}/supabase`;
         const envRead = await exec(
