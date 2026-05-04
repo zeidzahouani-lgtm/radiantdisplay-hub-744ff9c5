@@ -1577,7 +1577,57 @@ To rebuild manually: docker compose up -d --build
                     </div>
 
                     {sshInstallSupabaseLocal ? (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-md border bg-background/50">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs flex items-center gap-1.5"><Database className="h-3 w-3" />Type de stack base de données</Label>
+                            <Select value={sshDbStack} onValueChange={(v) => setSshDbStack(v as "supabase_full" | "postgres_only")} disabled={sshDeploying}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="supabase_full">Supabase complet (recommandé) — Postgres + Auth + Storage + Realtime</SelectItem>
+                                <SelectItem value="postgres_only">Postgres seul — utilitaires/scripts externes</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-muted-foreground">
+                              {sshDbStack === "supabase_full"
+                                ? "L'application sera 100% fonctionnelle (auth, médias, realtime, edge functions)."
+                                : "⚠ L'app frontend NE FONCTIONNERA PAS sans Auth/Storage/Realtime."}
+                            </p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Image Postgres</Label>
+                            <Select value={sshPostgresImage} onValueChange={setSshPostgresImage} disabled={sshDeploying || sshDbStack === "supabase_full"}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="postgres:15">postgres:15 (stable, défaut)</SelectItem>
+                                <SelectItem value="postgres:15-alpine">postgres:15-alpine (léger)</SelectItem>
+                                <SelectItem value="postgres:16">postgres:16</SelectItem>
+                                <SelectItem value="postgres:16-alpine">postgres:16-alpine</SelectItem>
+                                <SelectItem value="postgres:17">postgres:17</SelectItem>
+                                <SelectItem value="postgres:17-alpine">postgres:17-alpine</SelectItem>
+                                <SelectItem value="timescale/timescaledb:latest-pg15">TimescaleDB (PG15)</SelectItem>
+                                <SelectItem value="timescale/timescaledb:latest-pg16">TimescaleDB (PG16)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-muted-foreground">
+                              {sshDbStack === "supabase_full"
+                                ? "En mode Supabase complet, l'image Postgres officielle Supabase est utilisée (extensions requises)."
+                                : "Image Docker du conteneur Postgres standalone."}
+                            </p>
+                          </div>
+                        </div>
+
+                        {sshDbStack === "postgres_only" && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Mode Postgres seul — application non fonctionnelle</AlertTitle>
+                            <AlertDescription className="text-xs">
+                              Ce mode déploie uniquement un conteneur Postgres. L'app ScreenFlow a besoin d'Auth, Storage, Realtime et Edge Functions — elle ne pourra pas fonctionner. Utilisez plutôt « Supabase complet ».
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="space-y-1.5">
                           <Label className="text-xs">Port API (Kong)</Label>
                           <Input value={sshSupaKongPort} onChange={e => setSshSupaKongPort(e.target.value)} placeholder="8000" disabled={sshDeploying} />
