@@ -282,6 +282,11 @@ export default function AdminHealth() {
           <CardDescription>
             Teste les endpoints probables : {getLocalBackendCandidates().join(" · ")}
           </CardDescription>
+          {typeof window !== "undefined" && window.location.protocol === "https:" && (
+            <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              ⚠️ Cette page est en <strong>HTTPS</strong>. Le navigateur bloque les appels HTTP (mixed-content), donc les ports <code>:8000</code> et <code>:8080</code> en HTTP <strong>ne peuvent pas être testés</strong> ici. Seuls les endpoints HTTPS (typiquement <code>:8443</code>) sont sondés. Pour tester un backend HTTP, ouvrez l'app via <code>http://</code>.
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           {candidates.length === 0 ? (
