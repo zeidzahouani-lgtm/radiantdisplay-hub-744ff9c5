@@ -14,6 +14,8 @@ export type LocalHealthCheck = {
   durationMs: number;
   error: string | null;
   details?: string | null;
+  corsBlocked?: boolean;
+  hint?: string | null;
 };
 
 export type LocalHealthReport = {
@@ -67,11 +69,11 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       durationMs: Math.round(performance.now() - started),
       error: details,
       details,
+      corsBlocked: false,
+      hint: reachable ? null : "Redémarrez les conteneurs Docker du backend local (db, rest, storage, realtime, kong) puis relancez le test.",
     };
   } catch (error: any) {
     const isAbort = error?.name === "AbortError";
-    // Fallback no-cors : si le port est bien ouvert mais que CORS bloque la réponse,
-    // un fetch no-cors résout (status=0, type=opaque) et prouve la joignabilité.
     if (!isAbort) {
       try {
         const fallbackController = new AbortController();
@@ -83,7 +85,6 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
           signal: fallbackController.signal,
         });
         window.clearTimeout(fallbackTimeout);
-        // type === "opaque" => le serveur a répondu, mais le navigateur masque le contenu.
         if (opaque.type === "opaque" || opaque.type === "opaqueredirect") {
           return {
             ...check,
@@ -94,11 +95,13 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
             durationMs: Math.round(performance.now() - started),
             error: null,
             details:
-              "Service joignable mais CORS non configuré pour cette origine. Le service répond, ajoutez l'origine de l'app dans les CORS Kong/PostgREST pour des tests détaillés.",
+              "Service joignable mais CORS non configuré pour cette origine. Activez CORS sur Kong/PostgREST pour obtenir des tests détaillés.",
+            corsBlocked: true,
+            hint: "Ajoutez le plugin CORS dans kong.yml (ou la variable PGRST_SERVER_CORS_ALLOWED_ORIGINS) avec l'origine de l'app, puis redémarrez Kong.",
           };
         }
       } catch {
-        // ignore, on retombe sur le KO réseau classique
+        // ignore
       }
     }
     return {
@@ -110,6 +113,10 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       durationMs: Math.round(performance.now() - started),
       error: isAbort ? "Timeout après 6s" : error?.message || String(error),
       details: "Aucune réponse HTTP: URL inaccessible, DNS/SSL incorrect, port fermé, mixed-content (HTTPS→HTTP) ou proxy nginx non joignable.",
+      corsBlocked: false,
+      hint: isAbort
+        ? "Le service met plus de 6s à répondre. Vérifiez la charge serveur et l'état des conteneurs."
+        : "Vérifiez que l'IP/port est joignable depuis ce navigateur (firewall, VPN, mixed-content HTTPS→HTTP).",
     };
   } finally {
     window.clearTimeout(timeout);
