@@ -40,6 +40,28 @@ interface DeployBody {
   supabase_kong_http_port?: string;   // public REST/Auth gateway (default 8000)
   supabase_studio_port?: string;      // Supabase Studio UI (default 3000)
   supabase_db_port?: string;          // Postgres (default 5432)
+  // Database stack choice
+  // - "supabase_full" (default): full Supabase stack (Postgres + Auth + Storage + Realtime + Functions). Required for the app frontend to work.
+  // - "postgres_only": deploy a standalone Postgres container only. App frontend will NOT work (no Auth/Storage/Realtime). Useful for external scripts.
+  db_stack?: "supabase_full" | "postgres_only";
+  // Postgres image variant (used by both modes). Allowed values are validated server-side.
+  postgres_image?: string;            // e.g. "postgres:15", "postgres:16", "postgres:17", "postgres:15-alpine", "timescale/timescaledb:latest-pg16"
+}
+
+const ALLOWED_PG_IMAGES = new Set([
+  "postgres:15",
+  "postgres:15-alpine",
+  "postgres:16",
+  "postgres:16-alpine",
+  "postgres:17",
+  "postgres:17-alpine",
+  "timescale/timescaledb:latest-pg15",
+  "timescale/timescaledb:latest-pg16",
+]);
+function resolvePostgresImage(img?: string): string {
+  const v = (img || "").trim();
+  if (v && ALLOWED_PG_IMAGES.has(v)) return v;
+  return "postgres:15";
 }
 
 function ssh(opts: { host: string; port: number; username: string; password: string }): Promise<Client> {
