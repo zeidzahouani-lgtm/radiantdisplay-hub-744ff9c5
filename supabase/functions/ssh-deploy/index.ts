@@ -998,7 +998,12 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const enableHttps = !!body.enable_https;
   const httpsPort = body.https_port || "8443";
   const httpsDomain = (body.https_domain || body.host).trim();
-  const installSupabase = !!body.install_supabase_local;
+  const dbStack = body.db_stack === "postgres_only" ? "postgres_only" : "supabase_full";
+  const postgresImage = resolvePostgresImage(body.postgres_image);
+  // "Install Supabase local" is forced ON when stack is full and the toggle was passed
+  // For postgres_only, we deploy our OWN simple postgres container (no full Supabase stack).
+  const installSupabase = !!body.install_supabase_local && dbStack === "supabase_full";
+  const installPostgresOnly = !!body.install_supabase_local && dbStack === "postgres_only";
   const forceFreshInstall = !!body.force_fresh_install;
   const supaKongPort = body.supabase_kong_http_port || "8000";
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
