@@ -287,6 +287,7 @@ export default function AdminHealth() {
               ⚠️ Cette page est en <strong>HTTPS</strong>. Le navigateur bloque les appels HTTP (mixed-content), donc les ports <code>:8000</code> et <code>:8080</code> en HTTP <strong>ne peuvent pas être testés</strong> ici. Seuls les endpoints HTTPS (typiquement <code>:8443</code>) sont sondés. Pour tester un backend HTTP, ouvrez l'app via <code>http://</code>.
             </div>
           )}
+        </CardHeader>
         <CardContent className="space-y-3 text-sm">
           {candidates.length === 0 ? (
             <div className="rounded-md bg-muted p-3 text-muted-foreground">
