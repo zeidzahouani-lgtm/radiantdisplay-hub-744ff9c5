@@ -192,6 +192,8 @@ export default function AdminBackup() {
   // Install local self-hosted Supabase on the same server
   const [sshInstallSupabaseLocal, setSshInstallSupabaseLocal] = useState(false);
   const [sshForceFreshInstall, setSshForceFreshInstall] = useState(false);
+  const [sshDbStack, setSshDbStack] = useState<"supabase_full" | "postgres_only">("supabase_full");
+  const [sshPostgresImage, setSshPostgresImage] = useState("postgres:15");
   const [sshSupaKongPort, setSshSupaKongPort] = useState("8000");
   const [sshSupaStudioPort, setSshSupaStudioPort] = useState("3001");
   const [sshSupaDbPort, setSshSupaDbPort] = useState("5432");
