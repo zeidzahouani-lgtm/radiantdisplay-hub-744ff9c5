@@ -20,6 +20,7 @@ import { useVideoWalls } from "@/hooks/useVideoWalls";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { explainSupabaseError } from "@/lib/env";
 import { toast } from "sonner";
 import { useScreenLicenses } from "@/hooks/useScreenLicenses";
 
@@ -184,7 +185,8 @@ export function ScreenManager() {
       toast.success("Écran ajouté");
       setNewName("");
     } catch (err: any) {
-      toast.error(err?.message || "Erreur lors de l'ajout");
+      const diagnostic = explainSupabaseError(err, "Création écran");
+      toast.error(`Écran impossible: ${diagnostic.cause}`, { description: diagnostic.action });
     }
   };
 

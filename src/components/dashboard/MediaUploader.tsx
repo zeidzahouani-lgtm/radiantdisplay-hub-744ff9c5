@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useMedia } from "@/hooks/useMedia";
+import { explainSupabaseError } from "@/lib/env";
 import { toast } from "sonner";
 
 interface UploadProgress {
@@ -40,8 +41,9 @@ export function MediaUploader() {
           },
         });
         toast.success(`${file.name} uploadé avec succès`);
-      } catch {
-        toast.error(`Erreur lors de l'upload de ${file.name}`);
+      } catch (err: any) {
+        const diagnostic = explainSupabaseError(err, `Upload média: ${file.name}`);
+        toast.error(`Upload impossible: ${diagnostic.cause}`, { description: diagnostic.action });
       }
     }
 

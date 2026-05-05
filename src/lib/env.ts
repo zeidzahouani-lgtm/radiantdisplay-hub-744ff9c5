@@ -110,7 +110,7 @@ export function explainSupabaseError(error: unknown, context = "Supabase") {
 
   if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("fetch")) {
     cause = "Erreur réseau ou CORS";
-    action = "Vérifiez que VITE_SUPABASE_URL est joignable depuis le navigateur et que /rest/v1, /storage/v1 et /functions/v1 sont proxyfiés.";
+    action = "Le pré-vol CORS ou le proxy backend bloque la requête. Relancez le déploiement SSH pour appliquer la nouvelle config Nginx, puis vérifiez /admin/health.";
   } else if (lower.includes("invalid api key") || lower.includes("jwt") || anyError?.status === 401 || anyError?.status === 403) {
     cause = "Clé Supabase invalide ou permission/RLS refusée";
     action = "Vérifiez VITE_SUPABASE_PUBLISHABLE_KEY, ANON_KEY côté serveur et les politiques RLS appliquées par les migrations.";
@@ -122,7 +122,7 @@ export function explainSupabaseError(error: unknown, context = "Supabase") {
     action = "Vérifiez que les migrations du mode public local sont appliquées et que le rôle anon possède les politiques attendues.";
   } else if (lower.includes("cors")) {
     cause = "Erreur CORS";
-    action = "Vérifiez les headers Access-Control-Allow-* du proxy /functions/v1 et de Kong.";
+    action = "Relancez le déploiement SSH pour appliquer les headers Access-Control-Allow-* sur /rest/v1 et /storage/v1.";
   }
 
   console.error(`[db-diagnostic] ${context}: ${cause}`, {
