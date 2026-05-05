@@ -349,6 +349,21 @@ export default function AdminHealth() {
                     {check!.hint}
                   </div>
                 )}
+                {check!.url.startsWith("https://") && !check!.ok && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => {
+                      try {
+                        const u = new URL(check!.url);
+                        window.open(u.origin, "_blank", "noopener,noreferrer");
+                      } catch { /* ignore */ }
+                    }}
+                  >
+                    <Globe className="h-3.5 w-3.5" /> Ouvrir le backend pour accepter le certificat
+                  </Button>
+                )}
               </CardContent>
             </Card>
           );
