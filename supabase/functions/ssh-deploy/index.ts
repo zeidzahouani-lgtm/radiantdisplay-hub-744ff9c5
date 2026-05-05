@@ -1380,8 +1380,18 @@ CMD ["nginx","-g","daemon off;"]
       const functionProxyHeaders = `proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Host $host; proxy_set_header X-Forwarded-Proto ${enableHttps ? "https" : "http"}; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`;
       const localFunctionLocations = localFunctions.map((name) => `  location = /functions/v1/${name} { proxy_pass http://host.docker.internal:${supaKongPort}/functions/v1/${name}; ${functionProxyHeaders} }`).join("\n");
 
+      // Common proxy snippet shared by all Supabase upstream locations.
+      // CRITICAL: client_max_body_size must be large enough for media uploads (videos can be hundreds of MB).
+      // proxy_request_buffering off allows streaming large uploads to Kong/Storage without buffering to disk first.
+      const commonProxyHeaders = (proto: string) => `proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Upsert $http_x_upsert; proxy_set_header Content-Type $http_content_type; proxy_set_header X-Forwarded-Proto ${proto}; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`;
+      const storageProxy = (proto: string) => `proxy_pass http://host.docker.internal:${supaKongPort}/storage/v1/; ${commonProxyHeaders(proto)} client_max_body_size 1024m; proxy_request_buffering off; proxy_buffering off; proxy_read_timeout 3600s; proxy_send_timeout 3600s;`;
+      const restProxy = (proto: string) => `proxy_pass http://host.docker.internal:${supaKongPort}/rest/v1/; ${commonProxyHeaders(proto)} client_max_body_size 50m;`;
+      const authProxy = (proto: string) => `proxy_pass http://host.docker.internal:${supaKongPort}/auth/v1/; ${commonProxyHeaders(proto)} client_max_body_size 10m;`;
+      const realtimeProxy = (proto: string) => `proxy_pass http://host.docker.internal:${supaKongPort}/realtime/v1/; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; ${commonProxyHeaders(proto)} proxy_read_timeout 3600s; proxy_send_timeout 3600s;`;
+
       const nginxConf = enableHttps
-        ? `server {
+        ? `client_max_body_size 1024m;
+server {
   listen 80;
   server_name _;
   return 301 https://$host:${httpsPort}$request_uri;
@@ -1393,26 +1403,29 @@ server {
   ssl_certificate /etc/nginx/ssl/server.crt;
   ssl_certificate_key /etc/nginx/ssl/server.key;
   ssl_protocols TLSv1.2 TLSv1.3;
+  client_max_body_size 1024m;
   root /usr/share/nginx/html;
   index index.html;
-  location /auth/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/auth/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
-  location /rest/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/rest/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
-  location /storage/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/storage/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
-  location /realtime/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/realtime/v1/; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto https; proxy_read_timeout 3600s; proxy_send_timeout 3600s; }
+  location /auth/v1/ { ${authProxy("https")} }
+  location /rest/v1/ { ${restProxy("https")} }
+  location /storage/v1/ { ${storageProxy("https")} }
+  location /realtime/v1/ { ${realtimeProxy("https")} }
 ${localFunctionLocations}
   location / { try_files $uri $uri/ /index.html; }
   location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
 }
 `
-        : `server {
+        : `client_max_body_size 1024m;
+server {
   listen 80;
   server_name _;
+  client_max_body_size 1024m;
   root /usr/share/nginx/html;
   index index.html;
-  location /auth/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/auth/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto http; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
-  location /rest/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/rest/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto http; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
-  location /storage/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/storage/v1/; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto http; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
-  location /realtime/v1/ { proxy_pass http://host.docker.internal:${supaKongPort}/realtime/v1/; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header Authorization $http_authorization; proxy_set_header apikey $http_apikey; proxy_set_header X-Client-Info $http_x_client_info; proxy_set_header X-Forwarded-Proto http; proxy_read_timeout 3600s; proxy_send_timeout 3600s; }
+  location /auth/v1/ { ${authProxy("http")} }
+  location /rest/v1/ { ${restProxy("http")} }
+  location /storage/v1/ { ${storageProxy("http")} }
+  location /realtime/v1/ { ${realtimeProxy("http")} }
 ${localFunctionLocations}
   location / { try_files $uri $uri/ /index.html; }
   location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
