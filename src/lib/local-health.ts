@@ -215,7 +215,9 @@ export function getLocalBackendCandidates() {
   const hosts = new Set<string>();
   try { if (configured) hosts.add(new URL(configured).hostname); } catch { /* ignore */ }
   if (hostname) hosts.add(hostname);
-  hosts.add("screenflow.ds");
+  // Note : on n'ajoute PAS de hostnames "magiques" (ex: screenflow.ds) car s'ils
+  // ne résolvent pas en DNS sur le poste de l'utilisateur, ils polluent le diag
+  // avec des "DB KO" trompeurs. On ne sonde que ce qui est réellement configuré.
 
   // Mapping port → protocole naturel Supabase self-hosted :
   //  8443 = HTTPS Kong TLS · 8000 = HTTP Kong · 8080 = HTTP app/nginx
