@@ -104,6 +104,8 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
         // ignore
       }
     }
+    const isHttps = check.url.startsWith("https://");
+    const looksLikeCert = !isAbort && isHttps && /Failed to fetch|NetworkError|Load failed/i.test(error?.message || "");
     return {
       ...check,
       ok: false,
@@ -112,11 +114,15 @@ async function runCheck(check: Pick<LocalHealthCheck, "name" | "label" | "url" |
       statusText: "Aucune réponse",
       durationMs: Math.round(performance.now() - started),
       error: isAbort ? "Timeout après 6s" : error?.message || String(error),
-      details: "Aucune réponse HTTP: URL inaccessible, DNS/SSL incorrect, port fermé, mixed-content (HTTPS→HTTP) ou proxy nginx non joignable.",
+      details: looksLikeCert
+        ? "Échec réseau sur HTTPS: typiquement un certificat auto-signé non accepté par le navigateur, ou le DNS ne résout pas l'hôte. Ouvrez l'URL dans un nouvel onglet et acceptez le certificat, puis réessayez."
+        : "Aucune réponse HTTP: URL inaccessible, DNS/SSL incorrect, port fermé, mixed-content (HTTPS→HTTP) ou proxy nginx non joignable.",
       corsBlocked: false,
       hint: isAbort
         ? "Le service met plus de 6s à répondre. Vérifiez la charge serveur et l'état des conteneurs."
-        : "Vérifiez que l'IP/port est joignable depuis ce navigateur (firewall, VPN, mixed-content HTTPS→HTTP).",
+        : looksLikeCert
+          ? `Ouvrez ${new URL(check.url).origin} dans un nouvel onglet, acceptez le certificat HTTPS, puis relancez le test.`
+          : "Vérifiez que l'IP/port est joignable depuis ce navigateur (firewall, VPN, DNS, mixed-content HTTPS→HTTP).",
     };
   } finally {
     window.clearTimeout(timeout);
