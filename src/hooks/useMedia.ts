@@ -2,10 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadMediaFile, getMediaType } from "@/lib/supabase-helpers";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export function useMedia() {
   const queryClient = useQueryClient();
   const { currentEstablishmentId, isGlobalAdmin } = useEstablishmentContext();
+  const { user } = useAuth();
 
   const { data: media = [], isLoading } = useQuery({
     queryKey: ["media", currentEstablishmentId],
@@ -32,7 +34,7 @@ export function useMedia() {
         type,
         url,
         duration: type === 'image' ? 10 : 30,
-        user_id: null,
+        user_id: user?.id ?? null,
         establishment_id: currentEstablishmentId,
       } as any);
       if (error) throw error;
@@ -47,7 +49,7 @@ export function useMedia() {
         type: 'iframe',
         url,
         duration: 30,
-        user_id: null,
+        user_id: user?.id ?? null,
         establishment_id: currentEstablishmentId,
       } as any);
       if (error) throw error;
