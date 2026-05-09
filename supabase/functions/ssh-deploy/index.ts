@@ -1414,6 +1414,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         }
         log(applyMig.stdout.slice(-1500));
         log("✓ Migrations appliquées (les erreurs 'already exists' sont normales)");
+        await applyLocalDashboardWriteHotfix(conn, pending.supaDir, log);
         await syncLocalEdgeFunctions(conn, remoteDir, pending.supaDir, log);
         if (supabaseAnonOverride) {
           await ensureLocalApiServices(conn, pending.supaDir, supaKongPort, supabaseAnonOverride, log);
