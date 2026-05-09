@@ -2,10 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export function useScreens() {
   const queryClient = useQueryClient();
   const { currentEstablishmentId, isGlobalAdmin } = useEstablishmentContext();
+  const { user } = useAuth();
 
   const { data: screens = [], isLoading } = useQuery({
     queryKey: ["screens", currentEstablishmentId, isGlobalAdmin],
@@ -65,7 +67,7 @@ export function useScreens() {
       const { error } = await supabase.from("screens").insert({
         name,
         slug,
-        user_id: null,
+        user_id: user?.id ?? null,
         establishment_id: currentEstablishmentId,
       } as any);
       if (error) throw error;
