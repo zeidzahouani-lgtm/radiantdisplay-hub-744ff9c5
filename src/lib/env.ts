@@ -17,6 +17,8 @@ export const appEnv = {
   supabasePublishableKey: clean(rawEnv.VITE_SUPABASE_PUBLISHABLE_KEY),
   supabaseProjectId: clean(rawEnv.VITE_SUPABASE_PROJECT_ID),
   databaseUrl: clean(rawEnv.DATABASE_URL),
+  publicAppUrl: clean(rawEnv.VITE_PUBLIC_APP_URL),
+  appBasePath: clean(rawEnv.VITE_APP_BASE_PATH) || "/",
 };
 
 export function getSupabaseUrl() {
@@ -31,6 +33,43 @@ export function supabaseEndpoint(path: string) {
   const base = getSupabaseUrl();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalizedPath}`;
+}
+
+/**
+ * Base path de l'application (utile si servie sous un sous-chemin, ex: /app).
+ * Utilisé comme `basename` du BrowserRouter.
+ */
+export function getAppBasePath() {
+  const raw = appEnv.appBasePath || "/";
+  if (raw === "/") return "/";
+  return ("/" + raw.replace(/^\/+|\/+$/g, "")) || "/";
+}
+
+/**
+ * URL publique absolue de l'application (origin + base path).
+ * Priorité :
+ *   1. VITE_PUBLIC_APP_URL (build-time, recommandé en prod / déploiement distant)
+ *   2. window.location.origin (runtime fallback navigateur)
+ */
+export function getPublicAppUrl() {
+  if (appEnv.publicAppUrl) {
+    return appEnv.publicAppUrl.replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, "");
+  }
+  return "";
+}
+
+/**
+ * Construit une URL absolue côté app (ex: pour QR codes, liens player).
+ */
+export function buildAppUrl(path: string) {
+  const origin = getPublicAppUrl();
+  const base = getAppBasePath();
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const prefix = base === "/" ? "" : base.replace(/\/$/, "");
+  return `${origin}${prefix}${normalizedPath}`;
 }
 
 export function getLocalEnvChecks(): EnvCheck[] {
