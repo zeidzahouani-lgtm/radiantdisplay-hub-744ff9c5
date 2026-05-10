@@ -1165,7 +1165,13 @@ Deno.serve(async (req) => {
                         ? "Application des migrations locales lancée en arrière-plan."
                         : action === "quick_update"
                           ? "Mise à jour rapide lancée en arrière-plan (git pull + migrations + rebuild web)."
-                          : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                          : action === "network_inspect"
+                            ? "Inspection du réseau Docker lancée en arrière-plan."
+                            : action === "network_recreate"
+                              ? "Recréation du réseau Docker lancée en arrière-plan."
+                              : action === "network_set_subnet"
+                                ? "Application du sous-réseau personnalisé lancée en arrière-plan."
+                                : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
