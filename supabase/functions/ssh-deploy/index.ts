@@ -2146,7 +2146,7 @@ async function runDiagnoseServer(
   body: DeployBody,
   log: (m: string) => Promise<void> | void,
   persist: (patch: Record<string, unknown>) => Promise<void>,
-) {
+): Promise<{ action: string; checks: any[]; suggestions: string[] }> {
   const port = body.port ?? 22;
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const supaDir = `${remoteDir}/supabase`;
