@@ -1837,6 +1837,14 @@ key = base64.b64decode(${JSON.stringify(btoa(anonKey))}).decode()
 s = re.sub(r"VITE_SUPABASE_URL:\\s*.*", f"VITE_SUPABASE_URL: '{url}'", s)
 s = re.sub(r"VITE_SUPABASE_PUBLISHABLE_KEY:\\s*.*", f"VITE_SUPABASE_PUBLISHABLE_KEY: '{key}'", s)
 s = re.sub(r"VITE_SUPABASE_PROJECT_ID:\\s*.*", "VITE_SUPABASE_PROJECT_ID: 'local'", s)
+if re.search(r"VITE_PUBLIC_APP_URL:\\s*", s):
+    s = re.sub(r"VITE_PUBLIC_APP_URL:\\s*.*", f"VITE_PUBLIC_APP_URL: '{url}'", s)
+else:
+    s = re.sub(r"(VITE_SUPABASE_PROJECT_ID:\\s*'local'\\n)", "\\1        VITE_PUBLIC_APP_URL: '" + url.replace("'", "''") + "'\\n", s)
+if re.search(r"VITE_APP_BASE_PATH:\\s*", s):
+    s = re.sub(r"VITE_APP_BASE_PATH:\\s*.*", "VITE_APP_BASE_PATH: '/'", s)
+else:
+    s = re.sub(r"(VITE_PUBLIC_APP_URL:.*\\n)", "\\1        VITE_APP_BASE_PATH: '/'\\n", s)
 p.write_text(s)
 PY`;
   await exec(conn, patchCompose);
