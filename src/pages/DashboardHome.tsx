@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Link, Navigate } from "react-router-dom";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { EstablishmentDashboard } from "@/components/establishments/EstablishmentDashboard";
-import { FirstLaunchSetup } from "@/components/FirstLaunchSetup";
+// FirstLaunchSetup intentionally not rendered on the dashboard — keep dashboard always visible.
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip,
