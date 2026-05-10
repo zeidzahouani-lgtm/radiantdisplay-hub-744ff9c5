@@ -1768,7 +1768,10 @@ To rebuild manually: docker compose up -d --build
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleNetworkInspect} disabled={sshDeploying} className="gap-2">
                   {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
-                  Inspecter le réseau
+                  Inspecter le réseau Docker
+                </Button>
+                <Button onClick={handleNetworkGetConfig} disabled={sshDeploying} variant="outline" className="gap-2">
+                  <Globe className="h-4 w-4" />Lire la config système
                 </Button>
                 <Button onClick={handleNetworkRecreate} disabled={sshDeploying} variant="outline" className="gap-2">
                   <RefreshCw className="h-4 w-4" />Recréer le réseau
@@ -1777,11 +1780,38 @@ To rebuild manually: docker compose up -d --build
 
               <Separator />
 
+              {/* ===== Hostname ===== */}
               <div className="space-y-3">
                 <div>
-                  <h3 className="text-sm font-semibold flex items-center gap-2"><Radio className="h-4 w-4" />Sous-réseau personnalisé</h3>
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><MonitorSmartphone className="h-4 w-4" />Hostname système</h3>
                   <p className="text-xs text-muted-foreground">
-                    Définit un sous-réseau Docker fixe (utile en cas de conflit avec le LAN). Génère un fichier <code>docker-compose.network.yml</code> et redémarre la stack.
+                    Modifie le nom d'hôte du serveur via <code>hostnamectl</code> et met à jour <code>/etc/hosts</code>. Applicable à tout moment, sans redéployer.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="sys-hostname">Hostname (FQDN court)</Label>
+                    <Input id="sys-hostname" value={sysHostname} onChange={(e) => setSysHostname(e.target.value)} placeholder="screenflow-srv" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="sys-host-alias">Alias (optionnel)</Label>
+                    <Input id="sys-host-alias" value={sysHostAlias} onChange={(e) => setSysHostAlias(e.target.value)} placeholder="screenflow.local" />
+                  </div>
+                </div>
+                <Button onClick={handleSetHostname} disabled={sshDeploying || !sysHostname.trim()} className="gap-2">
+                  {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Appliquer le hostname
+                </Button>
+              </div>
+
+              <Separator />
+
+              {/* ===== Docker network full config ===== */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><Network className="h-4 w-4" />Carte réseau Docker</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Configure le bridge Docker (subnet, gateway, plage d'IPs, MTU, DNS, IPs statiques par conteneur). Génère <code>docker-compose.network.yml</code> et redémarre la stack — applicable même après un déploiement.
                   </p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -1794,15 +1824,59 @@ To rebuild manually: docker compose up -d --build
                     <Input id="net-subnet" value={netSubnet} onChange={(e) => setNetSubnet(e.target.value)} placeholder="172.28.0.0/16" />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="net-gw">Passerelle (optionnel)</Label>
+                    <Label htmlFor="net-gw">Passerelle</Label>
                     <Input id="net-gw" value={netGateway} onChange={(e) => setNetGateway(e.target.value)} placeholder="172.28.0.1" />
                   </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="net-iprange">Plage IP (ip_range)</Label>
+                    <Input id="net-iprange" value={netIpRange} onChange={(e) => setNetIpRange(e.target.value)} placeholder="172.28.5.0/24" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="net-mtu">MTU</Label>
+                    <Input id="net-mtu" value={netMtu} onChange={(e) => setNetMtu(e.target.value)} placeholder="1500" inputMode="numeric" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="net-dns">Serveurs DNS (séparés par virgule)</Label>
+                    <Input id="net-dns" value={netDns} onChange={(e) => setNetDns(e.target.value)} placeholder="8.8.8.8, 1.1.1.1" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="net-cips">IPs statiques par conteneur (une ligne par service: <code>service=IP</code>)</Label>
+                  <Textarea id="net-cips" rows={4} value={netContainerIps} onChange={(e) => setNetContainerIps(e.target.value)} placeholder={"web=172.28.0.10\nkong=172.28.0.20\nstudio=172.28.0.30"} />
+                  <p className="text-[11px] text-muted-foreground">L'IP doit appartenir au sous-réseau ci-dessus. Laisser vide pour attribution automatique.</p>
                 </div>
                 <Button onClick={handleNetworkSetSubnet} disabled={sshDeploying} className="gap-2">
                   {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Appliquer le sous-réseau
+                  Appliquer la configuration réseau
                 </Button>
               </div>
+
+              {networkConfig && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2"><Globe className="h-4 w-4" />Configuration système actuelle</h3>
+                    <div className="grid gap-2 md:grid-cols-2 text-xs">
+                      <div className="rounded border p-2"><span className="text-muted-foreground">Hostname:</span> <code>{networkConfig.hostname}</code></div>
+                      <div className="rounded border p-2"><span className="text-muted-foreground">FQDN:</span> <code>{networkConfig.fqdn}</code></div>
+                      <div className="rounded border p-2"><span className="text-muted-foreground">Passerelle:</span> <code>{networkConfig.gateway || "—"}</code></div>
+                      <div className="rounded border p-2"><span className="text-muted-foreground">DNS:</span> <code>{(networkConfig.dns || []).join(", ") || "—"}</code></div>
+                    </div>
+                    {Array.isArray(networkConfig.ip_addresses) && networkConfig.ip_addresses.length > 0 && (
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-semibold uppercase text-muted-foreground">Adresses IP</h4>
+                        <pre className="text-xs bg-muted/40 rounded p-2 overflow-x-auto">{networkConfig.ip_addresses.join("\n")}</pre>
+                      </div>
+                    )}
+                    {Array.isArray(networkConfig.routes) && networkConfig.routes.length > 0 && (
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-semibold uppercase text-muted-foreground">Routes</h4>
+                        <pre className="text-xs bg-muted/40 rounded p-2 overflow-x-auto">{networkConfig.routes.join("\n")}</pre>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               {networkInfo && (
                 <>
