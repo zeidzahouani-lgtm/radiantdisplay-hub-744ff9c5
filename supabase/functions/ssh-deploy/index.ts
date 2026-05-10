@@ -1015,7 +1015,11 @@ async function runDeploymentJob(
     } else if (body.action === "check_admin_status") {
       await runCheckAdminStatus(body, log, persist);
     } else {
-      await runDeployment(body, log);
+      if (body.action === "repair_local_writes") {
+        await runRepairLocalWrites(body, log);
+      } else {
+        await runDeployment(body, log);
+      }
     }
     await persist({ status: "success", logs, result: (globalThis as any).__lastDeployResult || null });
   } catch (e: any) {
@@ -1086,8 +1090,10 @@ Deno.serve(async (req) => {
       message: action === "reset_admin_password"
         ? "Réinitialisation du mot de passe admin lancée en arrière-plan."
         : action === "check_admin_status"
-        ? "Vérification du compte admin lancée en arrière-plan."
-        : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+          ? "Vérification du compte admin lancée en arrière-plan."
+          : action === "repair_local_writes"
+            ? "Réparation upload/écrans lancée en arrière-plan."
+            : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
