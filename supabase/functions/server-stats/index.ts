@@ -60,12 +60,17 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json()) as StatsBody;
-    if (!body.host || !body.username || !body.password) {
-      return new Response(JSON.stringify({ error: "Missing host/username/password" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // L'hôte est fixé côté serveur (variable SERVER_STATS_HOST) et n'est jamais exposé au client.
+    const serverHost = Deno.env.get("SERVER_STATS_HOST") || "";
+    if (!serverHost) {
+      return new Response(JSON.stringify({ error: "Hôte serveur non configuré (SERVER_STATS_HOST manquant)" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!body.username || !body.password) {
+      return new Response(JSON.stringify({ error: "Identifiants SSH manquants" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ===== Server stats via SSH =====
-    const conn = await ssh({ host: body.host, port: body.port ?? 22, username: body.username, password: body.password });
+    const conn = await ssh({ host: serverHost, port: body.port ?? 22, username: body.username, password: body.password });
 
     const script = `
 echo "===HOSTNAME===" && hostname

@@ -41,7 +41,6 @@ interface DbData {
 }
 
 export default function AdminServerStatus() {
-  const [host, setHost] = useState(() => localStorage.getItem("server_stats_host") || "");
   const [port, setPort] = useState(() => localStorage.getItem("server_stats_port") || "22");
   const [username, setUsername] = useState(() => localStorage.getItem("server_stats_user") || "root");
   const [password, setPassword] = useState("");
@@ -51,18 +50,17 @@ export default function AdminServerStatus() {
   const [lastFetch, setLastFetch] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    if (!host || !username || !password) {
-      toast.error("Renseignez l'IP, l'utilisateur et le mot de passe");
+    if (!username || !password) {
+      toast.error("Renseignez l'utilisateur et le mot de passe SSH");
       return;
     }
     setLoading(true);
     try {
-      localStorage.setItem("server_stats_host", host);
       localStorage.setItem("server_stats_port", port);
       localStorage.setItem("server_stats_user", username);
 
       const { data, error } = await supabase.functions.invoke("server-stats", {
-        body: { host: host.trim(), port: parseInt(port) || 22, username: username.trim(), password },
+        body: { port: parseInt(port) || 22, username: username.trim(), password },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erreur inconnue");
@@ -96,24 +94,20 @@ export default function AdminServerStatus() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2"><Server className="h-5 w-5" />Connexion SSH</CardTitle>
-          <CardDescription>Renseignez les identifiants pour interroger le serveur</CardDescription>
+          <CardDescription>L'hôte est configuré côté serveur. Renseignez uniquement vos identifiants SSH.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-            <div className="md:col-span-2 space-y-1.5">
-              <Label>Hôte / IP</Label>
-              <Input value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.10" disabled={loading} />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div className="space-y-1.5">
               <Label>Port</Label>
               <Input value={port} onChange={e => setPort(e.target.value)} placeholder="22" disabled={loading} />
             </div>
             <div className="space-y-1.5">
-              <Label>Utilisateur</Label>
+              <Label>Utilisateur SSH</Label>
               <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="root" disabled={loading} />
             </div>
             <div className="space-y-1.5">
-              <Label>Mot de passe</Label>
+              <Label>Mot de passe SSH</Label>
               <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" disabled={loading} />
             </div>
           </div>
