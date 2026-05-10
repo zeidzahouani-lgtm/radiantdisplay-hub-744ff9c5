@@ -1748,11 +1748,12 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
 async function repairLocalApiUrlOnExistingDeployment(conn: Client, body: DeployBody, kongPort: string, anonKey: string, log: (m: string) => Promise<void> | void) {
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
-  const publicBase = `http://${body.host}:${appPort}`;
+  const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
+  const publicBase = `http://${localIp}:${appPort}`;
   const repoDir = `${remoteDir}/repo`;
   const supaDir = `${remoteDir}/supabase`;
 
-  await log(`→ Réparation URL API navigateur : ${publicBase} (évite le certificat HTTPS auto-signé)`);
+  await log(`→ Réparation URL API navigateur : ${publicBase} (vérification locale via ${localIp})`);
 
   const nginxConf = `client_max_body_size 1024m;
 server {
@@ -1852,7 +1853,8 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
       await repairLocalApiUrlOnExistingDeployment(conn, body, kongPort, anonKey, log);
     }
     await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée en HTTP puis retestez.");
-    const repairedUrl = `http://${body.host}:${body.app_port || "8080"}`;
+    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
+    const repairedUrl = `http://${localIp}:${body.app_port || "8080"}`;
     (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true, url: repairedUrl, supabase_local: anonKey ? { url: repairedUrl, anon_key: anonKey } : null };
   } finally {
     try { conn.end(); } catch (_) {}
@@ -1887,7 +1889,8 @@ async function runResetAdminPassword(body: DeployBody, log: (m: string) => Promi
     await ensurePostgresSqlAccess(conn, supaDir, log);
 
     const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || "8000";
-    const publicUrl = await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLIC_URL") || await readRemoteEnv(conn, `${supaDir}/.env`, "API_EXTERNAL_URL") || `http://${body.host}:${kongPort}`;
+    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
+    const publicUrl = await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLIC_URL") || await readRemoteEnv(conn, `${supaDir}/.env`, "API_EXTERNAL_URL") || `http://${localIp}:${kongPort}`;
     const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY") || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
     if (!anonKey) {
       throw new Error("Impossible de lire ANON_KEY dans " + supaDir + "/.env");
@@ -2022,9 +2025,10 @@ async function runCheckAdminStatus(
 
     // 4. Real login test (only if user exists, role ok, with the default password)
     const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || "8000";
+    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
     const publicUrl = await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLIC_URL")
       || await readRemoteEnv(conn, `${supaDir}/.env`, "API_EXTERNAL_URL")
-      || `http://${body.host}:${kongPort}`;
+      || `http://${localIp}:${kongPort}`;
     result.public_url = publicUrl;
     const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY")
       || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
