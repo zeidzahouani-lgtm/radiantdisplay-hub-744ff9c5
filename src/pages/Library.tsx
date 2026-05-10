@@ -11,6 +11,7 @@ import { useMedia } from "@/hooks/useMedia";
 import { useEstablishments } from "@/hooks/useEstablishments";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { explainSupabaseError } from "@/lib/env";
+import { normalizeEmbedUrl } from "@/lib/iframe-url";
 import { toast } from "sonner";
 
 interface UploadProgress {
