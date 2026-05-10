@@ -1758,7 +1758,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
       supabase_local: installSupabase ? {
         url: supabaseUrlOverride,
         anon_key: supabaseAnonOverride,
-        studio_url: `http://${body.host}:${supaStudioPort}`,
+        studio_url: `http://${localIp}:${supaStudioPort}`,
       } : null,
       postgres_only: pgOnly,
     };
