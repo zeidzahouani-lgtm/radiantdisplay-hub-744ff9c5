@@ -108,7 +108,10 @@ export function explainSupabaseError(error: unknown, context = "Supabase") {
   let cause = "Erreur backend non classée";
   let action = "Ouvrez la console réseau et vérifiez l'URL appelée, le statut HTTP et la réponse JSON.";
 
-  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("fetch")) {
+  if (lower.includes("err_cert_authority_invalid") || lower.includes("cert_authority_invalid") || lower.includes("certificate")) {
+    cause = "Certificat HTTPS local non reconnu";
+    action = "Le navigateur bloque l'API locale avant CORS/RLS. Relancez la réparation SSH : elle rebascule l'API navigateur en HTTP local et désactive la redirection HTTPS auto-signée.";
+  } else if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("fetch")) {
     cause = "Erreur réseau ou CORS";
     action = "Le pré-vol CORS ou le proxy backend bloque la requête. Relancez le déploiement SSH pour appliquer la nouvelle config Nginx, puis vérifiez /admin/health.";
   } else if (lower.includes("invalid api key") || lower.includes("jwt") || anyError?.status === 401 || anyError?.status === 403) {
