@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update";
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
