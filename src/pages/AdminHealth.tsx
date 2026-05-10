@@ -1,14 +1,21 @@
 import { useLocalHealth } from "@/hooks/useLocalHealth";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Activity, CheckCircle2, Database, HardDrive, Radio, RefreshCw, XCircle, Shield, Timer, Globe, Wrench, Copy, AlertTriangle } from "lucide-react";
+import { Activity, CheckCircle2, Database, HardDrive, Radio, RefreshCw, XCircle, Shield, Timer, Globe, Wrench, Copy, AlertTriangle, FileSearch } from "lucide-react";
 import { discoverLocalBackends, getLocalBackendCandidates, type LocalBackendCandidate, type LocalHealthCheck } from "@/lib/local-health";
 import { getSupabaseUrl } from "@/lib/env";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const icons = { rest: Database, realtime: Radio, storage: HardDrive } as const;
+
+interface DiagTable { schema: string; table: string; rls_enabled: boolean; rls_forced: boolean }
+interface DiagPolicy { schema: string; table: string; policyname: string; cmd: string; roles: string; using_expr: string; check_expr: string; permissive: string }
+interface DiagBucket { id: string; name: string; public: boolean; file_size_limit: number | null; allowed_mime_types: string[] | null }
+interface DiagCount { label: string; n: number }
+interface DiagResult { ok: boolean; checked_at: string; tables: DiagTable[]; policies: DiagPolicy[]; buckets: DiagBucket[]; counts: DiagCount[] }
 
 function statusBadge(check: LocalHealthCheck) {
   if (check.ok && check.corsBlocked) return <Badge variant="secondary">OK (CORS bloqué)</Badge>;
