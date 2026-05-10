@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Activity, Cpu, MemoryStick, HardDrive, Server, Container, Database, RefreshCw, Loader2, Network, Wifi, Gauge } from "lucide-react";
+import { Activity, Cpu, MemoryStick, HardDrive, Server, Container, Database, RefreshCw, Loader2, Network, Wifi, Gauge, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
