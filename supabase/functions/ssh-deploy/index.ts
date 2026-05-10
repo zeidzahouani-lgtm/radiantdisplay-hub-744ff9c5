@@ -1671,11 +1671,11 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     await log("→ Test de connectivité de la stack déployée…");
 
     // App health
-    const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
+    const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${localIp}:${appPort}`;
     const localAppUrl = enableHttps ? `https://${localIp}:${httpsPort}` : `http://${localIp}:${appPort}`;
     const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
-    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${localAppUrl} (local serveur)` };
+    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${localAppUrl} (vérification 127.0.0.1)` };
     await log(`  • App         : ${connectivity.app.ok ? "✓" : "✗"} ${connectivity.app.detail}`);
 
     if (installSupabase) {
