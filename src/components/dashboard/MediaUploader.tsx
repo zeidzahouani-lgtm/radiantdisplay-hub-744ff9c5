@@ -56,13 +56,14 @@ export function MediaUploader() {
   const handleAddIframe = async () => {
     if (!iframeName || !iframeUrl) return;
     try {
+      const n = normalizeEmbedUrl(iframeUrl);
       await addIframeMutation.mutateAsync({ name: iframeName, url: iframeUrl });
-      toast.success("iFrame ajouté");
+      toast.success("iFrame ajouté", { description: n.changed ? n.note : undefined });
       setIframeName("");
       setIframeUrl("");
       setShowIframe(false);
-    } catch {
-      toast.error("Erreur lors de l'ajout");
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur lors de l'ajout");
     }
   };
 
