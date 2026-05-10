@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface LayoutRegion {
   id: string;
