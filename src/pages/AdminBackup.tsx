@@ -1209,6 +1209,8 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
+  const fixActionMap: Record<string, { label: string; run: () => void }> = {
+    quick_update: { label: "Mise à jour rapide", run: handleQuickUpdate },
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
     repair_local_writes: { label: "Réparer upload/écrans", run: handleRepairLocalWrites },
     repair_local_api_url: { label: "Corriger l'URL API", run: handleRepairApiUrl },
