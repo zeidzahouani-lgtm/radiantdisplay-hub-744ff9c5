@@ -62,9 +62,7 @@ function AdminDashboardContent() {
     );
   }
 
-  if (isGlobalAdmin && !currentEstablishmentId && stats.totalScreens === 0) {
-    return <FirstLaunchSetup />;
-  }
+  // No early FirstLaunchSetup — show the dashboard regardless of setup state.
 
   const healthScore = stats.totalScreens > 0
     ? Math.round((stats.onlineScreens / stats.totalScreens) * 100)
