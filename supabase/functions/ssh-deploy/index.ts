@@ -1185,7 +1185,7 @@ Deno.serve(async (req) => {
                                   ? "Mise à jour du hostname système lancée en arrière-plan."
                                   : action === "network_get_config"
                                     ? "Lecture de la configuration réseau lancée en arrière-plan."
-                                : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                                    : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
