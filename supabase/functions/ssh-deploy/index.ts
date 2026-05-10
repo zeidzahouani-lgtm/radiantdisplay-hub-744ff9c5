@@ -2025,9 +2025,10 @@ async function runCheckAdminStatus(
 
     // 4. Real login test (only if user exists, role ok, with the default password)
     const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || "8000";
+    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
     const publicUrl = await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLIC_URL")
       || await readRemoteEnv(conn, `${supaDir}/.env`, "API_EXTERNAL_URL")
-      || `http://${body.host}:${kongPort}`;
+      || `http://${localIp}:${kongPort}`;
     result.public_url = publicUrl;
     const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY")
       || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
