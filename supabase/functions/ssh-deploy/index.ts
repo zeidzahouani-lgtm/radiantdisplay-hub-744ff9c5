@@ -1450,19 +1450,19 @@ CMD ["nginx","-g","daemon off;"]
         "screen-setup-guide", "send-credentials", "server-stats", "sync-client-dravox", "test-email",
       ];
       // CORS strategy mirrors the static nginx.conf:
-      //   - An internal location /__cors_preflight__ returns 204 with full CORS headers for OPTIONS.
+      //   - A named error_page location returns 204 with full CORS headers for OPTIONS.
       //   - Each proxy location hides upstream CORS headers (avoids duplicate ACAO from Kong),
-      //     rewrites OPTIONS to /__cors_preflight__, and re-adds CORS on real responses.
-      // This avoids the brittle inline `if ($request_method = OPTIONS)` + add_header inheritance bug.
-      const corsHidesAndAdds = `proxy_hide_header Access-Control-Allow-Origin; proxy_hide_header Access-Control-Allow-Methods; proxy_hide_header Access-Control-Allow-Headers; proxy_hide_header Access-Control-Expose-Headers; if ($request_method = OPTIONS) { rewrite ^ /__cors_preflight__ last; } add_header Access-Control-Allow-Origin $cors_origin always; add_header Vary Origin always; add_header Access-Control-Expose-Headers "content-range, x-supabase-api-version, x-request-id, location" always;`;
+      //     returns 418 for OPTIONS so Nginx internally serves @cors_preflight, then re-adds CORS on real responses.
+      // This avoids the brittle inline `if ($request_method = OPTIONS)` + add_header inheritance/rewrite behavior.
+      const corsHidesAndAdds = `proxy_hide_header Access-Control-Allow-Origin; proxy_hide_header Access-Control-Allow-Methods; proxy_hide_header Access-Control-Allow-Headers; proxy_hide_header Access-Control-Expose-Headers; if ($request_method = OPTIONS) { return 418; } add_header Access-Control-Allow-Origin $cors_origin always; add_header Vary Origin always; add_header Access-Control-Expose-Headers "content-range, x-supabase-api-version, x-request-id, location" always;`;
 
       const preflightLocation = `  set $cors_origin $http_origin;
-  location = /__cors_preflight__ {
-    internal;
+  error_page 418 = @cors_preflight;
+  location @cors_preflight {
     add_header Access-Control-Allow-Origin $cors_origin always;
     add_header Vary Origin always;
     add_header Access-Control-Allow-Methods "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" always;
-    add_header Access-Control-Allow-Headers "authorization, apikey, content-type, x-client-info, x-upsert, prefer, accept-profile, content-profile, range, x-requested-with" always;
+    add_header Access-Control-Allow-Headers "authorization, apikey, content-type, x-client-info, x-upsert, prefer, accept-profile, content-profile, range, x-requested-with, x-supabase-api-version, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version" always;
     add_header Access-Control-Max-Age 86400 always;
     add_header Content-Length 0 always;
     return 204;
