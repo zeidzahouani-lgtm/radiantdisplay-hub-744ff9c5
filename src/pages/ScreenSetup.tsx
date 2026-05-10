@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Monitor, Smartphone, Tv, Copy, CheckCheck, ExternalLink, Pencil, Check, X, Bot, Send, Loader2, CheckCircle, AlertTriangle, HelpCircle, Bug, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,15 +10,33 @@ import { toast } from "sonner";
 import { useScreens } from "@/hooks/useScreens";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import ReactMarkdown from "react-markdown";
-import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
+import { getAppBasePath, getPublicAppUrl, getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
+
+function getCurrentBrowserPort() {
+  const configured = getPublicAppUrl();
+  try {
+    if (configured) {
+      const url = new URL(configured);
+      return url.port || (url.protocol === "https:" ? "443" : "80");
+    }
+  } catch {
+    // Fall back to the current browser URL below.
+  }
+  return window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+}
 
 function buildPlayerBase(port?: string): string {
-  const { protocol, hostname, port: currentPort } = window.location;
-  const finalPort = (port || "").trim() || currentPort;
-  const portPart = finalPort && !((protocol === "http:" && finalPort === "80") || (protocol === "https:" && finalPort === "443"))
-    ? `:${finalPort}`
-    : "";
-  return `${protocol}//${hostname}${portPart}/player/`;
+  const fallbackOrigin = `${window.location.protocol}//${window.location.host}`;
+  const rawBase = getPublicAppUrl() || fallbackOrigin;
+  const url = new URL(rawBase);
+  const finalPort = (port || "").trim();
+  if (finalPort) url.port = finalPort;
+  const basePath = getAppBasePath();
+  const prefix = basePath === "/" ? "" : basePath.replace(/\/$/, "");
+  url.pathname = `${prefix}/player/`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 function CopyButton({ text, label, icon }: { text: string; label?: string; icon?: React.ReactNode }) {
@@ -390,20 +408,29 @@ function CompatibilityTab() {
 export default function ScreenSetup() {
   const { screens, updateScreen } = useScreens();
   const { settings, updateSetting } = useAppSettings();
-  const [portInput, setPortInput] = useState(settings.player_port || "");
-  const playerBase = buildPlayerBase(settings.player_port);
-  const currentBrowserPort = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+  const [portInput, setPortInput] = useState("");
+  const effectivePlayerPort = portInput.trim() || settings.player_port;
+  const playerBase = buildPlayerBase(effectivePlayerPort);
+  const currentBrowserPort = getCurrentBrowserPort();
+
+  useEffect(() => {
+    setPortInput(settings.player_port || "");
+  }, [settings.player_port]);
 
   const savePort = () => {
     const v = portInput.trim();
-    if (v && !/^\d{1,5}$/.test(v)) {
+    const portNumber = Number(v);
+    if (v && (!/^\d{1,5}$/.test(v) || portNumber < 1 || portNumber > 65535)) {
       toast.error("Port invalide (1-65535)");
       return;
     }
     updateSetting.mutate(
       { key: "player_port", value: v },
       {
-        onSuccess: () => toast.success(v ? `Port player défini : ${v}` : "Port player réinitialisé (port courant)"),
+        onSuccess: () => {
+          setPortInput(v);
+          toast.success(v ? `Port player défini : ${v}` : "Port player réinitialisé (port courant)");
+        },
         onError: (e: any) => toast.error("Erreur : " + (e?.message || "inconnue")),
       }
     );

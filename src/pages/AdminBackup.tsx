@@ -43,9 +43,13 @@ COPY . .
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ARG VITE_SUPABASE_PROJECT_ID
+ARG VITE_PUBLIC_APP_URL
+ARG VITE_APP_BASE_PATH=/
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
+ENV VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
+ENV VITE_APP_BASE_PATH=$VITE_APP_BASE_PATH
 RUN npm run build
 
 # ===== Runtime stage =====
@@ -111,7 +115,7 @@ function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-function buildDockerCompose(env: "prod" | "staging", url: string, key: string, projectId: string, port: string) {
+function buildDockerCompose(env: "prod" | "staging", url: string, key: string, projectId: string, port: string, publicAppUrl: string, basePath = "/") {
   return `version: "3.9"
 services:
   screenflow-${env}:
@@ -121,6 +125,8 @@ services:
         VITE_SUPABASE_URL: ${url || "<VITE_SUPABASE_URL>"}
         VITE_SUPABASE_PUBLISHABLE_KEY: ${key || "<VITE_SUPABASE_PUBLISHABLE_KEY>"}
         VITE_SUPABASE_PROJECT_ID: ${projectId || "<VITE_SUPABASE_PROJECT_ID>"}
+        VITE_PUBLIC_APP_URL: ${publicAppUrl || `http://<IP_OU_DOMAINE>:${port}`}
+        VITE_APP_BASE_PATH: ${basePath || "/"}
     image: screenflow:${env}
     container_name: screenflow-${env}
     restart: unless-stopped
@@ -169,6 +175,7 @@ export default function AdminBackup() {
   const [envKey, setEnvKey] = useState(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "");
   const [envProjectId, setEnvProjectId] = useState(import.meta.env.VITE_SUPABASE_PROJECT_ID || "");
   const [envPort, setEnvPort] = useState("8080");
+  const [envPublicAppUrl, setEnvPublicAppUrl] = useState(import.meta.env.VITE_PUBLIC_APP_URL || "");
 
   // SSH Deploy state
   const [sshHost, setSshHost] = useState("");
@@ -672,7 +679,7 @@ export default function AdminBackup() {
 
   // ============ DOCKER ============
 
-  const dockerCompose = buildDockerCompose(envType, envUrl, envKey, envProjectId, envPort);
+  const dockerCompose = buildDockerCompose(envType, envUrl, envKey, envProjectId, envPort, envPublicAppUrl);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -714,7 +721,7 @@ export default function AdminBackup() {
     zip.file(".dockerignore", DOCKERIGNORE);
     zip.file(
       "docker-compose.yml",
-      buildDockerCompose("prod", envUrl, envKey, envProjectId, sshAppPort),
+      buildDockerCompose("prod", envUrl, envKey, envProjectId, sshAppPort, envPublicAppUrl || `http://${sshHost || "IP_SERVEUR"}:${sshAppPort}`),
     );
     zip.file(
       "README.txt",
@@ -818,6 +825,8 @@ To rebuild manually: docker compose up -d --build
           vite_supabase_url: backendUrl,
           vite_supabase_key: backendKey,
           vite_supabase_project_id: backendProjectId,
+          vite_public_app_url: `http://${sshHost.trim()}:${sshAppPort}`,
+          vite_app_base_path: "/",
           git_url: sshGitUrl.trim(),
           git_branch: sshGitBranch.trim() || "main",
           git_token: sshGitToken.trim() || undefined,
@@ -1363,6 +1372,10 @@ To rebuild manually: docker compose up -d --build
                 <div>
                   <Label className="text-xs">Port d'écoute Docker</Label>
                   <Input value={envPort} onChange={e => setEnvPort(e.target.value)} className="font-mono text-xs" />
+                </div>
+                <div>
+                  <Label className="text-xs">VITE_PUBLIC_APP_URL</Label>
+                  <Input value={envPublicAppUrl} onChange={e => setEnvPublicAppUrl(e.target.value)} placeholder={`http://IP_SERVEUR:${envPort}`} className="font-mono text-xs" />
                 </div>
               </div>
 
