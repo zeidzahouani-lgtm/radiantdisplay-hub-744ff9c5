@@ -2003,6 +2003,16 @@ To rebuild manually: docker compose up -d --build
                 </Button>
                 <Button
                   type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleApplyMigrations}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Applique automatiquement toutes les migrations SQL manquantes sur le serveur local"
+                >
+                  <GitBranch className="h-4 w-4" />Appliquer les migrations
+                </Button>
+                <Button
+                  type="button"
                   className="gap-2"
                   onClick={handleDiagnoseServer}
                   disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
