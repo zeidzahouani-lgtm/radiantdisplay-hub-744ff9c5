@@ -33,6 +33,28 @@ export default function AdminHealth() {
   const { data, isLoading, isFetching, refetch, error } = useLocalHealth(15000);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [candidates, setCandidates] = useState<LocalBackendCandidate[]>([]);
+  const [diag, setDiag] = useState<DiagResult | null>(null);
+  const [diagError, setDiagError] = useState<string | null>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+
+  const runDiagnostics = async () => {
+    setDiagLoading(true);
+    setDiagError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<DiagResult>("admin-diagnostics");
+      if (error) throw error;
+      if (!data?.ok) throw new Error("Réponse invalide");
+      setDiag(data);
+    } catch (e: any) {
+      setDiagError(e?.message || String(e));
+      toast.error("Diagnostic Supabase échoué : " + (e?.message || e));
+    } finally {
+      setDiagLoading(false);
+    }
+  };
+
+  useEffect(() => { runDiagnostics(); /* run on mount */ // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const dbCheck = useMemo(() => data?.checks.find((c) => c.name === "rest"), [data]);
   const realtimeCheck = useMemo(() => data?.checks.find((c) => c.name === "realtime"), [data]);
