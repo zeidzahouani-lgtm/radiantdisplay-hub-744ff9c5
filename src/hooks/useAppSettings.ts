@@ -91,8 +91,22 @@ export function useAppSettings() {
         .from("app_settings" as any)
         .upsert({ key, value, updated_at: new Date().toISOString() } as any, { onConflict: "key" });
       if (error) throw error;
+      return { key, value };
     },
-    onSuccess: () => {
+    onMutate: async ({ key, value }) => {
+      await queryClient.cancelQueries({ queryKey: ["app_settings"] });
+      const previous = queryClient.getQueryData<AppSettings>(["app_settings"]);
+      queryClient.setQueryData<AppSettings>(["app_settings"], (old) => ({
+        ...defaultSettings,
+        ...(old || {}),
+        [key]: value,
+      }));
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(["app_settings"], context.previous);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["app_settings"] });
     },
   });
