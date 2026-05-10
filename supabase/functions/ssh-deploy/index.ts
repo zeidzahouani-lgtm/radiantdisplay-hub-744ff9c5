@@ -1283,7 +1283,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         const appPublicUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
         const supaKongPublicUrl = `http://127.0.0.1:${supaKongPort}`;
-        const supaBrowserUrl = appPublicUrl;
+        // Force the deployed app + edge functions to talk to Supabase via the local IP (127.0.0.1 by default)
+        const supaBrowserUrl = `http://${localIp}:${appPort}`;
 
         const envPatch = [
           `POSTGRES_PASSWORD=${postgresPw}`,
@@ -1294,8 +1295,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
           `SUPABASE_SECRET_KEY=`,
           `DASHBOARD_USERNAME=admin`,
           `DASHBOARD_PASSWORD=${dashboardPw}`,
-          `SITE_URL=${appPublicUrl}`,
-          `API_EXTERNAL_URL=${supaKongPublicUrl}`,
+          `SITE_URL=${supaBrowserUrl}`,
+          `API_EXTERNAL_URL=${supaBrowserUrl}`,
           `SUPABASE_PUBLIC_URL=${supaBrowserUrl}`,
           `KONG_HTTP_PORT=${supaKongPort}`,
           `KONG_HTTPS_PORT=${supaKongHttpsPort}`,
@@ -1413,7 +1414,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await syncLocalAuthSafeEnv(conn, supaDir, log);
         await startLocalSupabaseEssentials(conn, supaDir, log, true);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
-        const supaBrowserUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
+        const supaBrowserUrl = `http://${localIp}:${appPort}`;
         supabaseUrlOverride = supaBrowserUrl;
         supabaseAnonOverride = anonKey;
         supabaseProjectIdOverride = "local";
@@ -1715,6 +1716,28 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
           await upsertDefaultAdminViaAuthApi(conn, supaDir, supaKongPort, serviceKey, DEFAULT_ADMIN_PASSWORD, log);
           await ensureDefaultAdminRole(conn, supaDir, log);
           await log("✓ Compte admin par défaut prêt — login : screenflow@screenflow.local / 260390DS");
+
+          // Confirme explicitement Auth + Storage via l'IP locale
+          await log(`→ Confirmation finale Auth/Storage via ${supaBrowserUrl}…`);
+          try {
+            await verifyAuthLoginFromServer(
+              conn,
+              `http://127.0.0.1:${supaKongPort}`,
+              supabaseAnonOverride,
+              DEFAULT_ADMIN_EMAIL,
+              DEFAULT_ADMIN_PASSWORD,
+              log,
+              buildDirectKongAuthLoginCommand(supaDir, supabaseAnonOverride, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD),
+            );
+            connectivity.auth_login = { ok: true, detail: `Login admin OK via http://127.0.0.1:${supaKongPort}` };
+          } catch (authErr: any) {
+            connectivity.auth_login = { ok: false, detail: (authErr?.message || String(authErr)).slice(0, 300) };
+            await log("⚠ Confirmation Auth échouée : " + connectivity.auth_login.detail);
+          }
+          const storageConfirm = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "apikey: ${supabaseAnonOverride}" -H "Authorization: Bearer ${supabaseAnonOverride}" "http://127.0.0.1:${supaKongPort}/storage/v1/bucket" || echo FAIL`);
+          const storageCode = storageConfirm.stdout.trim();
+          connectivity.storage_confirm = { ok: /^(200|401|403)$/.test(storageCode), detail: `HTTP ${storageCode} sur /storage/v1/bucket` };
+          await log(`  • Storage confirmation : ${connectivity.storage_confirm.ok ? "✓" : "✗"} ${connectivity.storage_confirm.detail}`);
         }
       } catch (adminErr: any) {
         await log("⚠ Création automatique de l'admin échouée : " + (adminErr?.message || String(adminErr)));
