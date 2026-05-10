@@ -2139,6 +2139,8 @@ async function runCheckAdminStatus(
     await persist({ status: "running", check_result: result });
     (globalThis as any).__lastDeployResult = { action: "check_admin_status", ...result };
   } finally {
+    try { conn.end(); } catch (_) {}
+  }
 }
 
 // ===== Read-only diagnostic of the deployed stack with suggested fixes =====
