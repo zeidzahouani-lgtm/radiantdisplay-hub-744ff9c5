@@ -1081,6 +1081,10 @@ async function runDeploymentJob(
       directResult = await runNetworkRecreate(body, log);
     } else if (body.action === "network_set_subnet") {
       directResult = await runNetworkSetSubnet(body, log);
+    } else if (body.action === "network_set_hostname") {
+      directResult = await runNetworkSetHostname(body, log);
+    } else if (body.action === "network_get_config") {
+      directResult = await runNetworkGetConfig(body, log);
     } else {
       await runDeployment(body, log);
     }
