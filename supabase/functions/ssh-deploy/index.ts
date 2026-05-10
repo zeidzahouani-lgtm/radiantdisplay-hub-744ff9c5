@@ -14,11 +14,17 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet" | "network_set_hostname" | "network_get_config";
   // Custom Docker network subnet (CIDR), e.g. 172.28.0.0/16
   network_subnet?: string;
   network_gateway?: string;
   network_name?: string;
+  network_ip_range?: string;        // CIDR sub-range for auto-assignment
+  network_mtu?: number;             // MTU (e.g. 1500)
+  network_dns?: string[];           // DNS servers for containers
+  container_ips?: Record<string, string>; // service_name -> static IP
+  hostname?: string;                // system hostname
+  hostname_alias?: string;          // /etc/hosts alias for the host IP
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -1075,6 +1081,10 @@ async function runDeploymentJob(
       directResult = await runNetworkRecreate(body, log);
     } else if (body.action === "network_set_subnet") {
       directResult = await runNetworkSetSubnet(body, log);
+    } else if (body.action === "network_set_hostname") {
+      directResult = await runNetworkSetHostname(body, log);
+    } else if (body.action === "network_get_config") {
+      directResult = await runNetworkGetConfig(body, log);
     } else {
       await runDeployment(body, log);
     }
@@ -1170,8 +1180,12 @@ Deno.serve(async (req) => {
                             : action === "network_recreate"
                               ? "Recréation du réseau Docker lancée en arrière-plan."
                               : action === "network_set_subnet"
-                                ? "Application du sous-réseau personnalisé lancée en arrière-plan."
-                                : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                                ? "Application de la configuration réseau Docker lancée en arrière-plan."
+                                : action === "network_set_hostname"
+                                  ? "Mise à jour du hostname système lancée en arrière-plan."
+                                  : action === "network_get_config"
+                                    ? "Lecture de la configuration réseau lancée en arrière-plan."
+                                    : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2738,9 +2752,21 @@ async function runNetworkSetSubnet(body: DeployBody, log: (m: string) => Promise
   const supaDir = `${remoteDir}/supabase`;
   const subnet = (body.network_subnet || "").trim();
   const gateway = (body.network_gateway || "").trim();
+  const ipRange = (body.network_ip_range || "").trim();
+  const mtu = body.network_mtu;
+  const dns = (body.network_dns || []).map((s) => s.trim()).filter(Boolean);
+  const containerIps = body.container_ips || {};
   const netName = (body.network_name || "screenflow_default").trim();
   if (!/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(subnet)) {
     throw new Error(`Sous-réseau invalide: ${subnet}. Utilisez la notation CIDR (ex: 172.28.0.0/16).`);
+  }
+  for (const [svc, ip] of Object.entries(containerIps)) {
+    if (ip && !/^\d+\.\d+\.\d+\.\d+$/.test(String(ip).trim())) {
+      throw new Error(`IP invalide pour ${svc}: ${ip}`);
+    }
+  }
+  for (const d of dns) {
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(d)) throw new Error(`DNS invalide: ${d}`);
   }
   await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
   const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
@@ -2749,30 +2775,111 @@ async function runNetworkSetSubnet(body: DeployBody, log: (m: string) => Promise
     const targetDir = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo ${supaDir} || echo ${remoteDir}`)).stdout.trim();
     await log(`→ Cible: ${targetDir}`);
 
-    const overrideYml =
-`networks:
-  default:
-    name: ${netName}
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: ${subnet}${gateway ? `\n          gateway: ${gateway}` : ""}
-`;
+    const ipamConfigLines = [`        - subnet: ${subnet}`];
+    if (gateway) ipamConfigLines.push(`          gateway: ${gateway}`);
+    if (ipRange) ipamConfigLines.push(`          ip_range: ${ipRange}`);
+    const driverOptsLines: string[] = [];
+    if (typeof mtu === "number" && mtu > 0) driverOptsLines.push(`      com.docker.network.driver.mtu: "${mtu}"`);
+
+    let yml = `networks:\n  default:\n    name: ${netName}\n    driver: bridge\n    ipam:\n      driver: default\n      config:\n${ipamConfigLines.join("\n")}\n`;
+    if (driverOptsLines.length) yml += `    driver_opts:\n${driverOptsLines.join("\n")}\n`;
+
+    // Per-service overrides (static IP + DNS)
+    const svcEntries = Object.entries(containerIps).filter(([, ip]) => String(ip).trim());
+    if (svcEntries.length || dns.length) {
+      yml += `services:\n`;
+      const svcSet = new Set<string>(svcEntries.map(([s]) => s));
+      // Ensure DNS applies to common services even without static IP
+      if (dns.length && svcSet.size === 0) {
+        ["web", "kong", "auth", "rest", "realtime", "storage", "studio"].forEach((s) => svcSet.add(s));
+      }
+      for (const svc of svcSet) {
+        yml += `  ${svc}:\n`;
+        if (dns.length) {
+          yml += `    dns:\n${dns.map((d) => `      - ${d}`).join("\n")}\n`;
+        }
+        const sIp = (containerIps[svc] || "").trim();
+        if (sIp) {
+          yml += `    networks:\n      default:\n        ipv4_address: ${sIp}\n`;
+        }
+      }
+    }
+
     await log(`→ Écriture de ${targetDir}/docker-compose.network.yml…`);
-    await uploadFile(conn, `${targetDir}/docker-compose.network.yml`, Buffer.from(overrideYml));
+    await uploadFile(conn, `${targetDir}/docker-compose.network.yml`, Buffer.from(yml));
 
     await log("→ Arrêt de la stack…");
     await exec(conn, `cd ${targetDir} && (docker compose -f docker-compose.yml -f docker-compose.network.yml down || docker-compose -f docker-compose.yml -f docker-compose.network.yml down) 2>&1`);
     await log(`→ Suppression du réseau '${netName}' s'il existe…`);
     await exec(conn, `docker network rm ${netName} 2>/dev/null || true`);
-    await log("→ Redémarrage avec le nouveau sous-réseau…");
+    await log("→ Redémarrage avec la nouvelle configuration réseau…");
     const r = await exec(conn, `cd ${targetDir} && (docker compose -f docker-compose.yml -f docker-compose.network.yml up -d || docker-compose -f docker-compose.yml -f docker-compose.network.yml up -d) 2>&1`);
     await log(r.stdout.split("\n").slice(-15).join("\n"));
 
     const insp = await exec(conn, `docker network inspect ${netName} --format '{{(index .IPAM.Config 0).Subnet}} {{(index .IPAM.Config 0).Gateway}}' 2>&1`);
     await log(`✓ Réseau '${netName}' actif → ${insp.stdout.trim()}`);
-    return { action: "network_set_subnet", ok: true, network: netName, subnet, gateway: gateway || null, applied: insp.stdout.trim() };
+    return {
+      action: "network_set_subnet", ok: true, network: netName, subnet,
+      gateway: gateway || null, ip_range: ipRange || null, mtu: mtu ?? null,
+      dns, container_ips: containerIps, applied: insp.stdout.trim(),
+    };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+// ===== Hostname / system network configuration =====
+async function runNetworkSetHostname(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const hostname = (body.hostname || "").trim();
+  const alias = (body.hostname_alias || "").trim();
+  if (!hostname || !/^[a-zA-Z0-9]([a-zA-Z0-9\-\.]{0,61}[a-zA-Z0-9])?$/.test(hostname)) {
+    throw new Error(`Hostname invalide: '${hostname}'. Utilisez lettres/chiffres/'-' (RFC 1123).`);
+  }
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const sudo = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S -p ''`;
+    await log(`→ hostnamectl set-hostname ${hostname}`);
+    const r1 = await exec(conn, `${sudo} hostnamectl set-hostname ${hostname} 2>&1`);
+    await log(r1.stdout || "(ok)");
+
+    // Update /etc/hosts: ensure 127.0.1.1 line points to new hostname
+    const aliasPart = alias ? ` ${alias}` : "";
+    const hostsLine = `127.0.1.1\t${hostname}${aliasPart}`;
+    await log("→ Mise à jour de /etc/hosts…");
+    const script = `${sudo} bash -c "sed -i '/^127\\.0\\.1\\.1[[:space:]]/d' /etc/hosts && echo -e '${hostsLine}' >> /etc/hosts" 2>&1`;
+    const r2 = await exec(conn, script);
+    if (r2.stdout) await log(r2.stdout);
+
+    const cur = await exec(conn, "hostname && hostname -f 2>/dev/null || true");
+    await log(`✓ Hostname actuel: ${cur.stdout.trim()}`);
+    return { action: "network_set_hostname", ok: true, hostname, alias: alias || null, current: cur.stdout.trim() };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+async function runNetworkGetConfig(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const hn = (await exec(conn, "hostname")).stdout.trim();
+    const fqdn = (await exec(conn, "hostname -f 2>/dev/null || hostname")).stdout.trim();
+    const ipAddr = (await exec(conn, "ip -4 -o addr show scope global 2>/dev/null | awk '{print $2\": \"$4}'")).stdout.trim().split("\n").filter(Boolean);
+    const routes = (await exec(conn, "ip -4 route 2>/dev/null")).stdout.trim().split("\n").filter(Boolean);
+    const dns = (await exec(conn, "grep -E '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}'")).stdout.trim().split("\n").filter(Boolean);
+    const gateway = (await exec(conn, "ip -4 route | awk '/default/ {print $3; exit}'")).stdout.trim();
+    const hosts = (await exec(conn, "cat /etc/hosts 2>/dev/null")).stdout;
+    await log(`✓ Hostname=${hn}, gateway=${gateway}, DNS=${dns.join(",")}`);
+    return {
+      action: "network_get_config", ok: true,
+      hostname: hn, fqdn, gateway, dns,
+      ip_addresses: ipAddr, routes, hosts_file: hosts,
+    };
   } finally {
     try { conn.end(); } catch (_) {}
   }
