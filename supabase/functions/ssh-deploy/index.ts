@@ -27,6 +27,8 @@ interface DeployBody {
   vite_supabase_url?: string;
   vite_supabase_key?: string;
   vite_supabase_project_id?: string;
+  vite_public_app_url?: string;
+  vite_app_base_path?: string;
   // Git source (cloned on the server)
   git_url: string;            // e.g. https://github.com/user/repo.git
   git_branch?: string;        // default: main
@@ -131,6 +133,8 @@ const DEFAULT_ADMIN_PASSWORD = "260390DS";
 const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
 function resolveBrowserAppBase(body: DeployBody, appPort: string, enableHttps = false, httpsDomain?: string, httpsPort?: string) {
+  const configured = (body.vite_public_app_url || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
   const host = (enableHttps ? (httpsDomain || body.host) : body.host).trim();
   return enableHttps ? `https://${host}:${httpsPort || "8443"}` : `http://${host}:${appPort}`;
 }
@@ -1517,9 +1521,13 @@ COPY . .
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ARG VITE_SUPABASE_PROJECT_ID
+ARG VITE_PUBLIC_APP_URL
+ARG VITE_APP_BASE_PATH=/
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
+ENV VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL
+ENV VITE_APP_BASE_PATH=$VITE_APP_BASE_PATH
 RUN npm run build
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -1615,6 +1623,8 @@ ${localFunctionLocations}
       - ./ssl:/etc/nginx/ssl:ro`
         : `    ports:
       - "${appPort}:80"`;
+      const publicAppUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
+      const appBasePath = body.vite_app_base_path || "/";
       const compose = `services:
   web:
     build:
@@ -1623,6 +1633,8 @@ ${localFunctionLocations}
         VITE_SUPABASE_URL: '${escEnv(supabaseUrlOverride || body.vite_supabase_url || "")}'
         VITE_SUPABASE_PUBLISHABLE_KEY: '${escEnv(supabaseAnonOverride || body.vite_supabase_key || "")}'
         VITE_SUPABASE_PROJECT_ID: '${escEnv(supabaseProjectIdOverride || body.vite_supabase_project_id || "")}'
+        VITE_PUBLIC_APP_URL: '${escEnv(publicAppUrl)}'
+        VITE_APP_BASE_PATH: '${escEnv(appBasePath)}'
     extra_hosts:
       - "host.docker.internal:host-gateway"
 ${portsBlock}
