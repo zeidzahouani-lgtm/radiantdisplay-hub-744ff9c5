@@ -1066,6 +1066,8 @@ To rebuild manually: docker compose up -d --build
   // ===== Generic SSH action runner with polling =====
   type DiagCheck = { key: string; label: string; ok: boolean; detail?: string; suggested_action?: string };
   const [serverDiag, setServerDiag] = useState<{ checks: DiagCheck[]; suggestions: string[] } | null>(null);
+  type MigItem = { name: string; status: "applied" | "skipped" | "error"; error?: string };
+  const [migrationResult, setMigrationResult] = useState<{ total: number; applied: number; skipped: number; errors: number; items: MigItem[] } | null>(null);
 
   const runSshAction = async (
     action: string,
