@@ -1270,6 +1270,7 @@ To rebuild manually: docker compose up -d --build
           <TabsTrigger value="restore" className="gap-2"><Upload className="h-4 w-4" />Restauration</TabsTrigger>
           <TabsTrigger value="env" className="gap-2"><ShieldCheck className="h-4 w-4" />Vérif. Env</TabsTrigger>
           <TabsTrigger value="docker" className="gap-2"><Container className="h-4 w-4" />Docker</TabsTrigger>
+          <TabsTrigger value="network" className="gap-2"><Wifi className="h-4 w-4" />Réseau Docker</TabsTrigger>
           <TabsTrigger value="ssh" className="gap-2"><Server className="h-4 w-4" />Déploiement SSH</TabsTrigger>
         </TabsList>
 
