@@ -287,7 +287,7 @@ export default function AdminBackup() {
   const persistSshConfig = (extra?: Record<string, any>) => {
     try {
       const payload = {
-        sshHost, sshPort, sshUser, sshRemoteDir, sshAppPort, sshAutoInstallDocker,
+        sshHost, sshLocalIp, sshPort, sshUser, sshRemoteDir, sshAppPort, sshAutoInstallDocker,
         sshGitUrl, sshGitBranch,
         sshEnableHttps, sshHttpsPort, sshHttpsDomain,
         sshIsolateBackend, sshSupabaseUrl, sshSupabaseKey, sshSupabaseProjectId,
