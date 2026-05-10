@@ -343,6 +343,153 @@ export default function AdminHealth() {
         </CardContent>
       </Card>
 
+      {/* Diagnostic Supabase : RLS / Buckets / Policies */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileSearch className="h-5 w-5 text-primary" /> Diagnostic Supabase (RLS, buckets, policies)
+              </CardTitle>
+              <CardDescription>
+                Inspection en lecture seule de <code>storage.objects</code> et <code>public.screens</code> via une fonction edge admin.
+              </CardDescription>
+            </div>
+            <Button onClick={runDiagnostics} disabled={diagLoading} variant="outline" className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${diagLoading ? "animate-spin" : ""}`} /> Relancer le diagnostic
+            </Button>
+          </div>
+          {diag && (
+            <div className="mt-2 text-xs text-muted-foreground">
+              Dernière analyse : {new Date(diag.checked_at).toLocaleString()}
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-5 text-sm">
+          {diagError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive">
+              {diagError}
+            </div>
+          )}
+
+          {/* RLS status */}
+          {diag && (
+            <div>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Shield className="h-4 w-4 text-primary" /> État RLS
+              </h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {diag.tables.map((t) => {
+                  const c = diag.counts.find((c) => c.label === `${t.schema}.${t.table}`);
+                  return (
+                    <div key={`${t.schema}.${t.table}`} className="rounded-md border bg-card p-3">
+                      <div className="flex items-center justify-between">
+                        <code className="text-xs">{t.schema}.{t.table}</code>
+                        <Badge variant={t.rls_enabled ? "default" : "destructive"}>
+                          {t.rls_enabled ? "RLS activé" : "RLS désactivé"}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Forcé : {t.rls_forced ? "oui" : "non"} · Lignes : {c?.n ?? "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+                {diag.tables.length === 0 && (
+                  <div className="text-xs text-muted-foreground">Aucune information de table trouvée.</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Buckets */}
+          {diag && (
+            <div>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <HardDrive className="h-4 w-4 text-primary" /> Buckets storage
+              </h3>
+              <div className="overflow-auto rounded-md border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 text-left">
+                    <tr>
+                      <th className="px-2 py-1.5">Nom</th>
+                      <th className="px-2 py-1.5">Public</th>
+                      <th className="px-2 py-1.5">Limite taille</th>
+                      <th className="px-2 py-1.5">MIME autorisés</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diag.buckets.map((b) => (
+                      <tr key={b.id} className="border-t">
+                        <td className="px-2 py-1.5 font-mono">{b.name}</td>
+                        <td className="px-2 py-1.5">
+                          <Badge variant={b.public ? "default" : "secondary"}>{b.public ? "public" : "privé"}</Badge>
+                        </td>
+                        <td className="px-2 py-1.5">{b.file_size_limit ? `${Math.round(b.file_size_limit / 1024 / 1024)} MB` : "—"}</td>
+                        <td className="px-2 py-1.5">{b.allowed_mime_types?.join(", ") || "tous"}</td>
+                      </tr>
+                    ))}
+                    {diag.buckets.length === 0 && (
+                      <tr><td colSpan={4} className="px-2 py-2 text-muted-foreground">Aucun bucket.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Policies */}
+          {diag && (
+            <div>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Wrench className="h-4 w-4 text-primary" /> Policies RLS
+              </h3>
+              {diag.tables.map((t) => {
+                const rows = diag.policies.filter((p) => p.schema === t.schema && p.table === t.table);
+                return (
+                  <div key={`pol-${t.schema}.${t.table}`} className="mb-3">
+                    <div className="mb-1 text-xs font-semibold text-muted-foreground">
+                      {t.schema}.{t.table} — {rows.length} policy(ies)
+                    </div>
+                    <div className="overflow-auto rounded-md border">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50 text-left">
+                          <tr>
+                            <th className="px-2 py-1.5">Nom</th>
+                            <th className="px-2 py-1.5">Cmd</th>
+                            <th className="px-2 py-1.5">Rôles</th>
+                            <th className="px-2 py-1.5">USING</th>
+                            <th className="px-2 py-1.5">WITH CHECK</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((p) => (
+                            <tr key={`${p.schema}.${p.table}.${p.policyname}`} className="border-t align-top">
+                              <td className="px-2 py-1.5 font-mono">{p.policyname}</td>
+                              <td className="px-2 py-1.5">{p.cmd}</td>
+                              <td className="px-2 py-1.5 font-mono">{p.roles}</td>
+                              <td className="px-2 py-1.5"><code className="break-all text-[11px]">{p.using_expr || "—"}</code></td>
+                              <td className="px-2 py-1.5"><code className="break-all text-[11px]">{p.check_expr || "—"}</code></td>
+                            </tr>
+                          ))}
+                          {rows.length === 0 && (
+                            <tr><td colSpan={5} className="px-2 py-2 text-destructive">Aucune policy — accès bloqué pour les rôles non-superuser.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!diag && !diagError && (
+            <div className="rounded-md bg-muted p-3 text-muted-foreground">Chargement du diagnostic…</div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Realtime + Storage */}
       <div className="grid gap-4 md:grid-cols-2">
         {[realtimeCheck, storageCheck].filter(Boolean).map((check) => {
