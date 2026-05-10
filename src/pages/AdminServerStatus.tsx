@@ -49,6 +49,7 @@ interface DbData {
 }
 
 export default function AdminServerStatus() {
+  const [host, setHost] = useState(() => localStorage.getItem("server_stats_host") || "");
   const [port, setPort] = useState(() => localStorage.getItem("server_stats_port") || "22");
   const [username, setUsername] = useState(() => localStorage.getItem("server_stats_user") || "root");
   const [password, setPassword] = useState("");
