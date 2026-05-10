@@ -1716,6 +1716,28 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
           await upsertDefaultAdminViaAuthApi(conn, supaDir, supaKongPort, serviceKey, DEFAULT_ADMIN_PASSWORD, log);
           await ensureDefaultAdminRole(conn, supaDir, log);
           await log("✓ Compte admin par défaut prêt — login : screenflow@screenflow.local / 260390DS");
+
+          // Confirme explicitement Auth + Storage via l'IP locale
+          await log(`→ Confirmation finale Auth/Storage via ${supaBrowserUrl}…`);
+          try {
+            await verifyAuthLoginFromServer(
+              conn,
+              `http://127.0.0.1:${supaKongPort}`,
+              supabaseAnonOverride,
+              DEFAULT_ADMIN_EMAIL,
+              DEFAULT_ADMIN_PASSWORD,
+              log,
+              buildDirectKongAuthLoginCommand(supaDir, supabaseAnonOverride, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD),
+            );
+            connectivity.auth_login = { ok: true, detail: `Login admin OK via http://127.0.0.1:${supaKongPort}` };
+          } catch (authErr: any) {
+            connectivity.auth_login = { ok: false, detail: (authErr?.message || String(authErr)).slice(0, 300) };
+            await log("⚠ Confirmation Auth échouée : " + connectivity.auth_login.detail);
+          }
+          const storageConfirm = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 -H "apikey: ${supabaseAnonOverride}" -H "Authorization: Bearer ${supabaseAnonOverride}" "http://127.0.0.1:${supaKongPort}/storage/v1/bucket" || echo FAIL`);
+          const storageCode = storageConfirm.stdout.trim();
+          connectivity.storage_confirm = { ok: /^(200|401|403)$/.test(storageCode), detail: `HTTP ${storageCode} sur /storage/v1/bucket` };
+          await log(`  • Storage confirmation : ${connectivity.storage_confirm.ok ? "✓" : "✗"} ${connectivity.storage_confirm.detail}`);
         }
       } catch (adminErr: any) {
         await log("⚠ Création automatique de l'admin échouée : " + (adminErr?.message || String(adminErr)));
