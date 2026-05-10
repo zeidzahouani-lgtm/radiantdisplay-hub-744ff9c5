@@ -1043,6 +1043,8 @@ async function runDeploymentJob(
 
   try {
     await persist({ status: "running", logs: [] });
+    let directResult: any = null;
+    (globalThis as any).__lastDeployResult = null;
     if (body.action === "reset_admin_password") {
       await runResetAdminPassword(body, log);
     } else if (body.action === "check_admin_status") {
@@ -1052,7 +1054,7 @@ async function runDeploymentJob(
     } else if (body.action === "repair_local_api_url") {
       await runRepairLocalApiUrl(body, log);
     } else if (body.action === "diagnose_server") {
-      await runDiagnoseServer(body, log, persist);
+      directResult = await runDiagnoseServer(body, log, persist);
     } else if (body.action === "restart_stack") {
       await runRestartStack(body, log);
     } else if (body.action === "repair_storage_buckets") {
@@ -1062,7 +1064,8 @@ async function runDeploymentJob(
     } else {
       await runDeployment(body, log);
     }
-    await persist({ status: "success", logs, result: (globalThis as any).__lastDeployResult || null });
+    const result = directResult ?? (globalThis as any).__lastDeployResult ?? null;
+    await persist({ status: "success", logs, result });
   } catch (e: any) {
     logs.push("✗ ERROR: " + (e?.message || String(e)));
     await persist({ status: "error", logs, error: e?.message || String(e) });
@@ -2136,6 +2139,8 @@ async function runCheckAdminStatus(
     await persist({ status: "running", check_result: result });
     (globalThis as any).__lastDeployResult = { action: "check_admin_status", ...result };
   } finally {
+    try { conn.end(); } catch (_) {}
+  }
 }
 
 // ===== Read-only diagnostic of the deployed stack with suggested fixes =====
@@ -2143,7 +2148,7 @@ async function runDiagnoseServer(
   body: DeployBody,
   log: (m: string) => Promise<void> | void,
   persist: (patch: Record<string, unknown>) => Promise<void>,
-) {
+): Promise<{ action: string; checks: any[]; suggestions: string[] }> {
   const port = body.port ?? 22;
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const supaDir = `${remoteDir}/supabase`;
@@ -2248,8 +2253,10 @@ async function runDiagnoseServer(
 
     const failures = checks.filter((c) => !c.ok);
     const suggestions = Array.from(new Set(failures.map((c) => c.suggested_action).filter(Boolean))) as string[];
+    const result = { action: "diagnose_server", checks, suggestions };
     await persist({ status: "running", diagnostic: { checks, suggestions } });
-    (globalThis as any).__lastDeployResult = { action: "diagnose_server", checks, suggestions };
+    (globalThis as any).__lastDeployResult = result;
+    return result;
   } finally {
     try { conn.end(); } catch (_) {}
   }
