@@ -1211,9 +1211,25 @@ To rebuild manually: docker compose up -d --build
 
   // ===== Network management =====
   const [networkInfo, setNetworkInfo] = useState<any>(null);
+  const [networkConfig, setNetworkConfig] = useState<any>(null);
   const [netSubnet, setNetSubnet] = useState("172.28.0.0/16");
   const [netGateway, setNetGateway] = useState("");
   const [netName, setNetName] = useState("screenflow_default");
+  const [netIpRange, setNetIpRange] = useState("");
+  const [netMtu, setNetMtu] = useState<string>("");
+  const [netDns, setNetDns] = useState<string>("8.8.8.8, 1.1.1.1");
+  const [netContainerIps, setNetContainerIps] = useState<string>("web=172.28.0.10\nkong=172.28.0.20");
+  const [sysHostname, setSysHostname] = useState<string>("");
+  const [sysHostAlias, setSysHostAlias] = useState<string>("");
+
+  const parseContainerIps = (raw: string): Record<string, string> => {
+    const out: Record<string, string> = {};
+    raw.split(/[\n,]/).map((l) => l.trim()).filter(Boolean).forEach((line) => {
+      const m = line.match(/^([a-zA-Z0-9_\-]+)\s*[=:]\s*(\d+\.\d+\.\d+\.\d+)$/);
+      if (m) out[m[1]] = m[2];
+    });
+    return out;
+  };
 
   const handleNetworkInspect = () => {
     setNetworkInfo(null);
@@ -1221,6 +1237,17 @@ To rebuild manually: docker compose up -d --build
       initialLog: "🔎 Inspection du réseau Docker…",
       successMessage: "Inspection terminée ✓",
       onResult: (r) => setNetworkInfo(r),
+    });
+  };
+  const handleNetworkGetConfig = () => {
+    setNetworkConfig(null);
+    runSshAction("network_get_config", {}, {
+      initialLog: "📡 Lecture de la configuration réseau du serveur…",
+      successMessage: "Configuration réseau lue ✓",
+      onResult: (r) => {
+        setNetworkConfig(r);
+        if (r?.hostname && !sysHostname) setSysHostname(r.hostname);
+      },
     });
   };
   const handleNetworkRecreate = () => {
@@ -1234,13 +1261,39 @@ To rebuild manually: docker compose up -d --build
       toast.error("Sous-réseau invalide (utilisez la notation CIDR, ex: 172.28.0.0/16)");
       return;
     }
+    const dnsList = netDns.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    for (const d of dnsList) {
+      if (!/^\d+\.\d+\.\d+\.\d+$/.test(d)) { toast.error(`DNS invalide: ${d}`); return; }
+    }
+    const cIps = parseContainerIps(netContainerIps);
+    const mtuNum = netMtu.trim() ? Number(netMtu.trim()) : undefined;
+    if (mtuNum !== undefined && (!Number.isFinite(mtuNum) || mtuNum < 576 || mtuNum > 9000)) {
+      toast.error("MTU invalide (576-9000)"); return;
+    }
     runSshAction("network_set_subnet", {
       network_subnet: netSubnet.trim(),
       network_gateway: netGateway.trim() || undefined,
       network_name: netName.trim() || "screenflow_default",
+      network_ip_range: netIpRange.trim() || undefined,
+      network_mtu: mtuNum,
+      network_dns: dnsList,
+      container_ips: cIps,
     }, {
-      initialLog: `🌐 Application du sous-réseau ${netSubnet} sur ${netName}…`,
-      successMessage: "Sous-réseau appliqué ✓",
+      initialLog: `🌐 Application de la configuration réseau (${netSubnet} sur ${netName})…`,
+      successMessage: "Configuration réseau appliquée ✓",
+    });
+  };
+  const handleSetHostname = () => {
+    const h = sysHostname.trim();
+    if (!/^[a-zA-Z0-9]([a-zA-Z0-9\-\.]{0,61}[a-zA-Z0-9])?$/.test(h)) {
+      toast.error("Hostname invalide (RFC 1123)"); return;
+    }
+    runSshAction("network_set_hostname", {
+      hostname: h,
+      hostname_alias: sysHostAlias.trim() || undefined,
+    }, {
+      initialLog: `🖥️ Application du hostname '${h}'…`,
+      successMessage: "Hostname appliqué ✓",
     });
   };
 
