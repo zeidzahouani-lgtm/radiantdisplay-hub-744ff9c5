@@ -1037,9 +1037,27 @@ function PlayerRuntime({ id }: { id: string | undefined }) {
   }
 
   if (!screen) {
+    const askedId = id ?? "(inconnu)";
+    const setupUrl = (typeof window !== "undefined" ? window.location.origin : "") + "/setup";
     return (
-      <div style={{ position: "fixed", inset: 0, backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "#ef4444", fontSize: 18 }}>Écran introuvable</p>
+      <div style={{ position: "fixed", inset: 0, backgroundColor: "#0a0e17", color: "#e5e7eb", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center", gap: 16 }}>
+        <MonitorX style={{ height: 56, width: 56, color: "#ef4444" }} />
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#ef4444", letterSpacing: "0.05em" }}>Écran introuvable</h1>
+        <p style={{ maxWidth: 520, color: "#9ca3af", fontSize: 14, lineHeight: 1.6 }}>
+          Aucun écran ne correspond à <code style={{ color: "#fbbf24", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: 4 }}>{askedId}</code> dans la base de données.
+          <br /><br />
+          Cela arrive généralement après un nouveau déploiement (la base est vide) ou si l'écran a été supprimé.
+          Connectez-vous au tableau de bord pour créer un nouvel écran, puis utilisez sa nouvelle URL.
+        </p>
+        <a
+          href={setupUrl}
+          style={{ marginTop: 8, padding: "10px 20px", backgroundColor: "#3b82f6", color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: 14, fontWeight: 600 }}
+        >
+          Configurer un écran
+        </a>
+        <p style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+          {typeof window !== "undefined" ? window.location.host : ""}
+        </p>
       </div>
     );
   }
