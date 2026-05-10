@@ -40,6 +40,7 @@ interface DeployBody {
   supabase_kong_http_port?: string;   // public REST/Auth gateway (default 8000)
   supabase_studio_port?: string;      // Supabase Studio UI (default 3000)
   supabase_db_port?: string;          // Postgres (default 5432)
+  local_ip?: string;                  // Server-side local IP for internal checks (default 127.0.0.1)
   // Database stack choice
   // - "supabase_full" (default): full Supabase stack (Postgres + Auth + Storage + Realtime + Functions). Required for the app frontend to work.
   // - "postgres_only": deploy a standalone Postgres container only. App frontend will NOT work (no Auth/Storage/Realtime). Useful for external scripts.
@@ -800,8 +801,9 @@ async function syncLocalEdgeFunctions(conn: Client, remoteDir: string, supaDir: 
     `cd ${supaDir} && ` +
     `anon=$(grep -E '^ANON_KEY=' .env | head -1 | cut -d= -f2-); ` +
     `svc=$(grep -E '^SERVICE_ROLE_KEY=' .env | head -1 | cut -d= -f2-); ` +
-    `for k in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY FUNCTIONS_VERIFY_JWT; do sed -i "/^$k=/d" .env; done; ` +
-    `printf 'SUPABASE_URL=http://kong:8000\nSUPABASE_ANON_KEY=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nFUNCTIONS_VERIFY_JWT=false\n' "$anon" "$svc" >> .env; ` +
+    `pgpw=$(grep -E '^POSTGRES_PASSWORD=' .env | head -1 | cut -d= -f2-); ` +
+    `for k in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_DB_URL DATABASE_URL FUNCTIONS_VERIFY_JWT; do sed -i "/^$k=/d" .env; done; ` +
+    `printf 'SUPABASE_URL=http://kong:8000\nSUPABASE_ANON_KEY=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nSUPABASE_DB_URL=postgresql://postgres:%s@db:5432/postgres\nDATABASE_URL=postgresql://postgres:%s@db:5432/postgres\nFUNCTIONS_VERIFY_JWT=false\n' "$anon" "$svc" "$pgpw" "$pgpw" >> .env; ` +
     `(docker compose up -d --no-deps functions 2>&1 || docker compose up -d --no-deps edge-runtime 2>&1 || true); ` +
     `(docker compose restart functions 2>&1 || docker compose restart edge-runtime 2>&1 || true)`;
   const result = await exec(conn, cmd);
