@@ -1519,8 +1519,13 @@ To rebuild manually: docker compose up -d --build
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2"><Server className="h-3.5 w-3.5" />Adresse IP / Hostname</Label>
+                  <Label className="flex items-center gap-2"><Server className="h-3.5 w-3.5" />Adresse IP / Hostname (publique)</Label>
                   <Input value={sshHost} onChange={e => setSshHost(e.target.value)} placeholder="123.45.67.89" disabled={sshDeploying} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2"><Server className="h-3.5 w-3.5" />Adresse IP locale du serveur</Label>
+                  <Input value={sshLocalIp} onChange={e => setSshLocalIp(e.target.value)} placeholder="127.0.0.1" disabled={sshDeploying} />
+                  <p className="text-[11px] text-muted-foreground">Utilisée pour les vérifications internes et la connexion à la base de données depuis le serveur (par défaut <code>127.0.0.1</code>).</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Port SSH</Label>
