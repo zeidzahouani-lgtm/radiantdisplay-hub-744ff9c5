@@ -105,16 +105,33 @@ export function explainSupabaseError(error: unknown, context = "Supabase") {
   const message = anyError?.message || String(error || "Erreur inconnue");
   const lower = message.toLowerCase();
 
+  // Try to extract HTTP status from messages like "Upload échoué (HTTP 413) — ..."
+  const httpMatch = message.match(/HTTP\s+(\d{3})/i);
+  const httpStatus = anyError?.status || (httpMatch ? parseInt(httpMatch[1], 10) : undefined);
+
   let cause = "Erreur backend non classée";
-  let action = "Ouvrez la console réseau et vérifiez l'URL appelée, le statut HTTP et la réponse JSON.";
+  // Fallback action shows the REAL error so user/dev can act on it directly
+  let action = message.length > 0 ? message.slice(0, 400) : "Ouvrez la console réseau et vérifiez l'URL appelée, le statut HTTP et la réponse JSON.";
 
   if (lower.includes("err_cert_authority_invalid") || lower.includes("cert_authority_invalid") || lower.includes("certificate")) {
     cause = "Certificat HTTPS local non reconnu";
     action = "Le navigateur bloque l'API locale avant CORS/RLS. Relancez la réparation SSH : elle rebascule l'API navigateur en HTTP local et désactive la redirection HTTPS auto-signée.";
-  } else if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("fetch")) {
+  } else if (httpStatus === 413 || lower.includes("trop volumineux") || lower.includes("payload too large")) {
+    cause = "Fichier trop volumineux (limite proxy)";
+    action = "Le proxy nginx limite la taille d'upload. Redéployez l'application via /admin/backup pour appliquer la nouvelle limite (1 Go), ou réduisez le fichier.";
+  } else if (httpStatus === 404 && (lower.includes("bucket") || lower.includes("media"))) {
+    cause = "Bucket Storage 'media' introuvable";
+    action = "Le bucket 'media' n'existe pas sur l'instance Supabase. Créez-le via Studio (port 3001) ou réappliquez les migrations storage.";
+  } else if (httpStatus === 0 || lower.includes("réseau/cors") || lower.includes("aucune réponse")) {
+    cause = "Backend Storage injoignable";
+    action = "Le service Storage ne répond pas. Vérifiez 'docker compose ps storage kong' sur le serveur et que /storage/v1/ est proxié par nginx.";
+  } else if (httpStatus === 502 || httpStatus === 503 || httpStatus === 504) {
+    cause = `Service Storage indisponible (HTTP ${httpStatus})`;
+    action = "Redémarrez les conteneurs : docker compose restart storage rest kong.";
+  } else if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("network error")) {
     cause = "Erreur réseau ou CORS";
     action = "Le pré-vol CORS ou le proxy backend bloque la requête. Relancez le déploiement SSH pour appliquer la nouvelle config Nginx, puis vérifiez /admin/health.";
-  } else if (lower.includes("invalid api key") || lower.includes("jwt") || anyError?.status === 401 || anyError?.status === 403) {
+  } else if (lower.includes("invalid api key") || lower.includes("jwt") || httpStatus === 401 || httpStatus === 403) {
     cause = "Clé Supabase invalide ou permission/RLS refusée";
     action = "Vérifiez VITE_SUPABASE_PUBLISHABLE_KEY, ANON_KEY côté serveur et les politiques RLS appliquées par les migrations.";
   } else if (lower.includes("does not exist") || anyError?.code === "42P01" || anyError?.code === "42703") {
