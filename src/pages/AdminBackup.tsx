@@ -1940,6 +1940,55 @@ To rebuild manually: docker compose up -d --build
                 >
                   <ShieldCheck className="h-4 w-4" />Réparer upload/écrans
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairApiUrl}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Corrige SUPABASE_PUBLIC_URL / API_EXTERNAL_URL et le proxy Nginx"
+                >
+                  <Wifi className="h-4 w-4" />Corriger l'URL API
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairBuckets}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Recrée les buckets Storage 'uploads' et 'media' et leurs policies"
+                >
+                  <HardDrive className="h-4 w-4" />Réparer buckets Storage
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairRealtime}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Réajoute les tables à la publication supabase_realtime et redémarre le service"
+                >
+                  <Radio className="h-4 w-4" />Réparer Realtime
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRestartStack}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Redémarre tous les conteneurs Docker (web + Supabase local)"
+                >
+                  <RefreshCw className="h-4 w-4" />Redémarrer la stack
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={handleDiagnoseServer}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Vérifie l'état complet du serveur et propose des correctifs"
+                >
+                  <Stethoscope className="h-4 w-4" />Diagnostiquer le serveur
+                </Button>
                 {sshDeployedUrl && (
                   <a href={sshDeployedUrl} target="_blank" rel="noopener noreferrer">
                     <Button variant="outline" className="gap-2">
