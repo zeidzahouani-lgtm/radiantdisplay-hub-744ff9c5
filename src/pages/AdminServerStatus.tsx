@@ -59,17 +59,18 @@ export default function AdminServerStatus() {
   const [lastFetch, setLastFetch] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    if (!username || !password) {
-      toast.error("Renseignez l'utilisateur et le mot de passe SSH");
+    if (!host || !username || !password) {
+      toast.error("Renseignez l'hôte, l'utilisateur et le mot de passe SSH");
       return;
     }
     setLoading(true);
     try {
+      localStorage.setItem("server_stats_host", host);
       localStorage.setItem("server_stats_port", port);
       localStorage.setItem("server_stats_user", username);
 
       const { data, error } = await supabase.functions.invoke("server-stats", {
-        body: { port: parseInt(port) || 22, username: username.trim(), password },
+        body: { host: host.trim(), port: parseInt(port) || 22, username: username.trim(), password },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erreur inconnue");
@@ -83,6 +84,39 @@ export default function AdminServerStatus() {
       setLoading(false);
     }
   };
+
+  // Compute alerts from results
+  const alerts: { level: "warning" | "critical"; title: string; message: string }[] = [];
+  if (server) {
+    if (server.cpu.usage_pct >= 90) alerts.push({ level: "critical", title: "CPU saturé", message: `Utilisation CPU à ${server.cpu.usage_pct.toFixed(1)}%` });
+    else if (server.cpu.usage_pct >= 75) alerts.push({ level: "warning", title: "CPU élevé", message: `Utilisation CPU à ${server.cpu.usage_pct.toFixed(1)}%` });
+
+    const _memPct = (server.memory.used / server.memory.total) * 100;
+    if (_memPct >= 90) alerts.push({ level: "critical", title: "Mémoire saturée", message: `RAM utilisée à ${_memPct.toFixed(0)}%` });
+    else if (_memPct >= 80) alerts.push({ level: "warning", title: "Mémoire élevée", message: `RAM utilisée à ${_memPct.toFixed(0)}%` });
+
+    const _diskPct = (server.disk.used / server.disk.total) * 100;
+    if (_diskPct >= 90) alerts.push({ level: "critical", title: "Disque presque plein", message: `Partition / utilisée à ${_diskPct.toFixed(0)}%` });
+    else if (_diskPct >= 80) alerts.push({ level: "warning", title: "Disque chargé", message: `Partition / utilisée à ${_diskPct.toFixed(0)}%` });
+
+    if (server.swap.total > 0) {
+      const _swapPct = (server.swap.used / server.swap.total) * 100;
+      if (_swapPct >= 50) alerts.push({ level: "warning", title: "Swap actif", message: `Swap utilisé à ${_swapPct.toFixed(0)}% — la RAM est probablement insuffisante` });
+    }
+
+    server.disks?.forEach((d) => {
+      const v = parseFloat(d.pct);
+      if (v >= 90) alerts.push({ level: "critical", title: `Disque ${d.mount} presque plein`, message: `${d.pct} utilisés sur ${d.device}` });
+      else if (v >= 80) alerts.push({ level: "warning", title: `Disque ${d.mount} chargé`, message: `${d.pct} utilisés sur ${d.device}` });
+    });
+
+    const stoppedDocker = server.docker?.containers?.filter((c) => !c.status.includes("Up")) || [];
+    stoppedDocker.forEach((c) => alerts.push({ level: "critical", title: `Conteneur arrêté: ${c.name}`, message: c.status }));
+  }
+  if (database?.local) {
+    if (database.local.saturation_pct >= 70) alerts.push({ level: "critical", title: "DB locale critique", message: `Saturation à ${database.local.saturation_pct.toFixed(1)}% du disque` });
+    else if (database.local.saturation_pct >= 40) alerts.push({ level: "warning", title: "DB locale volumineuse", message: `Saturation à ${database.local.saturation_pct.toFixed(1)}% du disque` });
+  }
 
   const memPct = server ? (server.memory.used / server.memory.total) * 100 : 0;
   const diskPct = server ? (server.disk.used / server.disk.total) * 100 : 0;
