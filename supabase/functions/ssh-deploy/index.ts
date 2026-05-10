@@ -1777,11 +1777,11 @@ async function repairLocalApiUrlOnExistingDeployment(conn: Client, body: DeployB
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
   const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
-  const publicBase = `http://${localIp}:${appPort}`;
+  const publicBase = resolveBrowserAppBase(body, appPort);
   const repoDir = `${remoteDir}/repo`;
   const supaDir = `${remoteDir}/supabase`;
 
-  await log(`→ Réparation URL API navigateur : ${publicBase} (vérification locale via ${localIp})`);
+  await log(`→ Réparation URL API navigateur : ${publicBase} (vérifications serveur via ${localIp})`);
 
   const nginxConf = `client_max_body_size 1024m;
 server {
@@ -1881,8 +1881,7 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
       await repairLocalApiUrlOnExistingDeployment(conn, body, kongPort, anonKey, log);
     }
     await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée en HTTP puis retestez.");
-    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
-    const repairedUrl = `http://${localIp}:${body.app_port || "8080"}`;
+    const repairedUrl = resolveBrowserAppBase(body, body.app_port || "8080");
     (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true, url: repairedUrl, supabase_local: anonKey ? { url: repairedUrl, anon_key: anonKey } : null };
   } finally {
     try { conn.end(); } catch (_) {}
