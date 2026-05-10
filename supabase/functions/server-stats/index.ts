@@ -87,6 +87,25 @@ echo "===DISK_ALL===" && df -B1 -x tmpfs -x devtmpfs -x squashfs --output=source
 echo "===NET===" && (ip -4 addr show | grep -oP '(?<=inet\\s)\\d+(\\.\\d+){3}' | grep -v '127.0.0.1' | head -3)
 echo "===DOCKER===" && (docker ps --format '{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}' 2>/dev/null || echo "NONE")
 echo "===DOCKER_VERSION===" && (docker --version 2>/dev/null || echo "NONE")
+echo "===PG_CONTAINER===" && (docker ps --format '{{.Names}}' 2>/dev/null | grep -iE 'postgres|supabase.*db|supabase-db' | head -1)
+echo "===PG_SIZE===" && (
+  C=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE 'postgres|supabase.*db|supabase-db' | head -1);
+  if [ -n "$C" ]; then
+    docker exec $C psql -U postgres -tAc "SELECT COALESCE(SUM(pg_database_size(datname)),0) FROM pg_database WHERE datistemplate=false" 2>/dev/null;
+  elif command -v psql >/dev/null 2>&1; then
+    sudo -u postgres psql -tAc "SELECT COALESCE(SUM(pg_database_size(datname)),0) FROM pg_database WHERE datistemplate=false" 2>/dev/null;
+  else
+    du -sb /var/lib/postgresql 2>/dev/null | awk '{print $1}';
+  fi
+)
+echo "===PG_DBS===" && (
+  C=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE 'postgres|supabase.*db|supabase-db' | head -1);
+  if [ -n "$C" ]; then
+    docker exec $C psql -U postgres -tAF'|' -c "SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate=false ORDER BY pg_database_size(datname) DESC" 2>/dev/null;
+  elif command -v psql >/dev/null 2>&1; then
+    sudo -u postgres psql -tAF'|' -c "SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate=false ORDER BY pg_database_size(datname) DESC" 2>/dev/null;
+  fi
+)
 echo "===PROCESSES===" && ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head -6
 `;
     const raw = await exec(conn, script);
@@ -147,7 +166,27 @@ echo "===PROCESSES===" && ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head -6
     // Storage size estimate (sum of media rows is not size; we just count)
     const { data: recentScreens } = await (supabase as any).from("screens").select("id,name,status,player_heartbeat_at").limit(20).order("updated_at", { ascending: false });
 
-    const database = { tables: counts, recent_screens: recentScreens || [] };
+    // Local Postgres size from SSH
+    const localPgSize = parseInt(get("PG_SIZE").trim()) || 0;
+    const pgContainer = get("PG_CONTAINER");
+    const pgDatabases = get("PG_DBS").split("\n").filter(Boolean).map((l) => {
+      const [name, size] = l.split("|");
+      return { name: name?.trim() || "", size: parseInt(size?.trim() || "0") };
+    });
+    const diskTotal = parseInt(diskParts[0] || "0");
+    const dbSaturationPct = diskTotal > 0 ? (localPgSize / diskTotal) * 100 : 0;
+
+    const database = {
+      tables: counts,
+      recent_screens: recentScreens || [],
+      local: {
+        container: pgContainer,
+        size_bytes: localPgSize,
+        saturation_pct: dbSaturationPct,
+        disk_total_bytes: diskTotal,
+        databases: pgDatabases,
+      },
+    };
 
     return new Response(JSON.stringify({ success: true, server, database, timestamp: new Date().toISOString() }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

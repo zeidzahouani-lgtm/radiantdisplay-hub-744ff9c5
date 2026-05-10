@@ -38,6 +38,13 @@ interface ServerData {
 interface DbData {
   tables: Record<string, number>;
   recent_screens: { id: string; name: string; status: string; player_heartbeat_at: string | null }[];
+  local?: {
+    container: string;
+    size_bytes: number;
+    saturation_pct: number;
+    disk_total_bytes: number;
+    databases: { name: string; size: number }[];
+  };
 }
 
 export default function AdminServerStatus() {
@@ -258,7 +265,44 @@ export default function AdminServerStatus() {
             <CardTitle className="text-lg flex items-center gap-2"><Database className="h-5 w-5" />Base de données</CardTitle>
             <CardDescription>Nombre d'enregistrements par table</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
+            {database.local && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-4 rounded-lg border bg-muted/30">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Database className="h-3.5 w-3.5" />Taille DB locale</p>
+                    <p className="text-2xl font-bold">{formatBytes(database.local.size_bytes)}</p>
+                    {database.local.container && <p className="text-xs text-muted-foreground mt-1 font-mono truncate">{database.local.container}</p>}
+                  </div>
+                  <div className="p-4 rounded-lg border bg-muted/30">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Gauge className="h-3.5 w-3.5" />Taux de saturation</p>
+                    <p className="text-2xl font-bold">{database.local.saturation_pct.toFixed(2)}%</p>
+                    <Progress value={Math.min(100, database.local.saturation_pct)} className="mt-2" />
+                  </div>
+                  <div className="p-4 rounded-lg border bg-muted/30">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5"><HardDrive className="h-3.5 w-3.5" />Disque total</p>
+                    <p className="text-2xl font-bold">{formatBytes(database.local.disk_total_bytes)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">DB / Disque /</p>
+                  </div>
+                </div>
+                {database.local.databases.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">Bases détectées</p>
+                    {database.local.databases.map((d) => (
+                      <div key={d.name} className="flex items-center justify-between text-sm p-2 rounded border bg-card">
+                        <span className="font-mono">{d.name}</span>
+                        <span className="text-muted-foreground">{formatBytes(d.size)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!database.local.container && database.local.size_bytes === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Aucun PostgreSQL local détecté (Docker ou natif).</p>
+                )}
+                <Separator />
+              </div>
+            )}
+
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {Object.entries(database.tables).map(([name, count]) => (
                 <div key={name} className="p-3 rounded-lg border bg-muted/30">
