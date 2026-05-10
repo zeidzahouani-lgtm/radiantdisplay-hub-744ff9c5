@@ -1,4 +1,7 @@
-import { Tv, Image, ListMusic, Clock, LayoutDashboard, LayoutGrid, Users, Building2, Settings, Palette, Key, Sparkles, Mail, AtSign, ClipboardList, BookOpen, BarChart3, DatabaseBackup, Activity } from "lucide-react";
+import { Tv, Image, ListMusic, Clock, LayoutDashboard, LayoutGrid, Users, Building2, Settings, Palette, Key, Sparkles, Mail, AtSign, ClipboardList, BookOpen, BarChart3, DatabaseBackup, Activity, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -180,7 +183,8 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-3">
+      <SidebarFooter className="p-3 space-y-2">
+        <SidebarLogoutButton collapsed={collapsed} />
         {!collapsed && (
           <div className="px-2 py-1.5 text-[11px] text-muted-foreground rounded-lg bg-secondary/30">
             Mode local public
@@ -188,5 +192,29 @@ export function AppSidebar() {
         )}
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function SidebarLogoutButton({ collapsed }: { collapsed: boolean }) {
+  const { signOut, user } = useAuth();
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast.success("Déconnexion réussie");
+    } catch (e: any) {
+      toast.error("Erreur lors de la déconnexion", { description: e?.message });
+    }
+  };
+  if (!user) return null;
+  return (
+    <Button
+      variant="ghost"
+      onClick={handleLogout}
+      className={`w-full justify-${collapsed ? "center" : "start"} text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl`}
+      title="Se déconnecter"
+    >
+      <LogOut className={`h-4 w-4 ${collapsed ? "" : "mr-2"}`} />
+      {!collapsed && <span className="text-[13px]">Se déconnecter</span>}
+    </Button>
   );
 }

@@ -8,9 +8,11 @@ import { Moon, Sun, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LocalMaintenanceBanner } from "@/components/LocalMaintenanceBanner";
+import { useAutoLogout } from "@/hooks/useAutoLogout";
 
 export function DashboardLayout() {
   useEstablishmentBranding();
+  useAutoLogout();
   const { theme, toggleTheme } = useTheme();
 
   return (
