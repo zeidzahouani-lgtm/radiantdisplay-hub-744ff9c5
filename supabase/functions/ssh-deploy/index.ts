@@ -1748,8 +1748,12 @@ PY`;
   await exec(conn, patchCompose);
   await exec(conn, `cd ${supaDir} && for k in SITE_URL SUPABASE_PUBLIC_URL; do sed -i "/^$k=/d" .env; done && printf 'SITE_URL=%s\nSUPABASE_PUBLIC_URL=%s\n' ${shQuote(publicBase)} ${shQuote(publicBase)} >> .env && docker compose restart auth storage rest kong 2>&1 || true`);
   await exec(conn, `cd ${repoDir} && (docker compose up -d --build web || docker-compose up -d --build web) 2>&1`);
-  const probe = await exec(conn, `curl -sS -m 10 -o /tmp/sf_proxy_bucket.txt -w "%{http_code}" ${shQuote(`${publicBase}/storage/v1/bucket`)} -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || true`);
-  await log(`✓ URL API corrigée. Ouvrez l'application en HTTP : ${publicBase} (test Storage HTTP ${probe.stdout.trim() || "n/a"})`);
+  // Vérification depuis le serveur via 127.0.0.1 (évite DNS public + cert auto-signé)
+  const probe = await exec(conn, `curl -sS -m 10 -o /tmp/sf_proxy_bucket.txt -w "%{http_code}" ${shQuote(`http://127.0.0.1:${kongPort}/storage/v1/bucket`)} -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || true`);
+  const probeRest = await exec(conn, `curl -sS -m 10 -o /dev/null -w "%{http_code}" ${shQuote(`http://127.0.0.1:${kongPort}/rest/v1/`)} -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || true`);
+  const probeAuth = await exec(conn, `curl -sS -m 10 -o /dev/null -w "%{http_code}" ${shQuote(`http://127.0.0.1:${kongPort}/auth/v1/health`)} 2>/dev/null || true`);
+  await log(`✓ URL API corrigée. Ouvrez l'application en HTTP : ${publicBase}`);
+  await log(`  • Vérif locale 127.0.0.1:${kongPort} → Storage HTTP ${probe.stdout.trim() || "n/a"}, REST HTTP ${probeRest.stdout.trim() || "n/a"}, Auth HTTP ${probeAuth.stdout.trim() || "n/a"}`);
   (globalThis as any).__lastDeployResult = { action: "repair_local_api_url", ok: true, url: publicBase, supabase_local: { url: publicBase, anon_key: anonKey } };
 }
 
