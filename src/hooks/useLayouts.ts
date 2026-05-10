@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface LayoutRegion {
   id: string;
@@ -37,6 +38,7 @@ export interface Layout {
 export function useLayouts() {
   const queryClient = useQueryClient();
   const { currentEstablishmentId, isGlobalAdmin } = useEstablishmentContext();
+  const { user } = useAuth();
 
   const { data: layouts = [], isLoading } = useQuery({
     queryKey: ["layouts", currentEstablishmentId, isGlobalAdmin],
@@ -64,7 +66,7 @@ export function useLayouts() {
           name: params.name,
           width: params.width || 1920,
           height: params.height || 1080,
-          user_id: null,
+          user_id: user?.id ?? null,
           establishment_id: currentEstablishmentId,
           wall_id: params.wall_id ?? null,
           wall_mode: params.wall_mode ?? 'single',
@@ -76,6 +78,7 @@ export function useLayouts() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["layouts"] }),
   });
+
 
   const deleteLayout = useMutation({
     mutationFn: async (id: string) => {

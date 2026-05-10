@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useMedia } from "@/hooks/useMedia";
 import { useEstablishments } from "@/hooks/useEstablishments";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
+import { explainSupabaseError } from "@/lib/env";
 import { toast } from "sonner";
 
 interface UploadProgress {
@@ -55,8 +56,9 @@ export default function Library() {
           },
         });
         toast.success(`${file.name} uploadé`);
-      } catch {
-        toast.error(`Erreur: ${file.name}`);
+      } catch (err: any) {
+        const diag = explainSupabaseError(err, `Upload ${file.name}`);
+        toast.error(`Upload impossible: ${diag.cause}`, { description: diag.action });
       }
     }
     setUploads([]);
