@@ -2128,6 +2128,44 @@ To rebuild manually: docker compose up -d --build
                 </div>
               )}
 
+              {quickUpdateResult && (
+                <div className="space-y-2 rounded-xl border bg-card/50 p-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Rocket className="h-4 w-4" />Résumé de la mise à jour rapide
+                  </h3>
+                  <div className="grid sm:grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 rounded-lg bg-background border">
+                      <div className="font-medium flex items-center gap-1">
+                        {quickUpdateResult.git?.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                        Code (git pull)
+                      </div>
+                      <div className="text-muted-foreground mt-1">
+                        {quickUpdateResult.git?.message || "—"}
+                        {quickUpdateResult.git?.commit && <> · <code>{quickUpdateResult.git.commit}</code></>}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-background border">
+                      <div className="font-medium flex items-center gap-1">
+                        {quickUpdateResult.functions?.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
+                        Fonctions backend
+                      </div>
+                      <div className="text-muted-foreground mt-1">
+                        {quickUpdateResult.functions?.ok ? "Synchronisées" : "Non synchronisées"}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-background border">
+                      <div className="font-medium flex items-center gap-1">
+                        {quickUpdateResult.web_rebuild?.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                        Conteneur web
+                      </div>
+                      <div className="text-muted-foreground mt-1">
+                        {quickUpdateResult.web_rebuild?.ok ? "Reconstruit & redémarré" : "Non reconstruit"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {migrationResult && (
                 <div className="space-y-3 rounded-xl border bg-card/50 p-4">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
