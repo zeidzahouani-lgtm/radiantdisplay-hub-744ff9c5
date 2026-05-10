@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Link, Navigate } from "react-router-dom";
 import { useEstablishmentContext } from "@/contexts/EstablishmentContext";
 import { EstablishmentDashboard } from "@/components/establishments/EstablishmentDashboard";
-import { FirstLaunchSetup } from "@/components/FirstLaunchSetup";
+// FirstLaunchSetup intentionally not rendered on the dashboard — keep dashboard always visible.
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip,
@@ -27,9 +27,7 @@ const MEDIA_TYPE_COLORS: Record<string, string> = {
 export default function DashboardHome() {
   const { isGlobalAdmin, currentEstablishmentId, memberships, isLoading: ctxLoading } = useEstablishmentContext();
 
-  if (!ctxLoading && memberships.length === 0) {
-    return <FirstLaunchSetup />;
-  }
+  // Always render the dashboard, even when no establishment exists yet.
 
   // Non-global-admin with an establishment: show establishment dashboard
   if (!ctxLoading && !isGlobalAdmin && currentEstablishmentId) {
@@ -64,9 +62,7 @@ function AdminDashboardContent() {
     );
   }
 
-  if (isGlobalAdmin && !currentEstablishmentId && stats.totalScreens === 0) {
-    return <FirstLaunchSetup />;
-  }
+  // No early FirstLaunchSetup — show the dashboard regardless of setup state.
 
   const healthScore = stats.totalScreens > 0
     ? Math.round((stats.onlineScreens / stats.totalScreens) * 100)
