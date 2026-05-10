@@ -1691,6 +1691,34 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
   }
 }
 
+async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+
+  try {
+    const check = await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo MISSING`);
+    if (!check.stdout.includes("OK")) {
+      throw new Error(`Aucune stack backend locale trouvée dans ${supaDir}. Lancez d'abord un déploiement complet avec Supabase local.`);
+    }
+    await ensurePostgresSqlAccess(conn, supaDir, log);
+    await applyLocalDashboardWriteHotfix(conn, supaDir, log);
+
+    const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || body.supabase_kong_http_port || "8000";
+    const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY") || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
+    if (anonKey) await ensureLocalApiServices(conn, supaDir, kongPort, anonKey, log);
+    await exec(conn, `cd ${supaDir} && docker compose restart rest storage kong 2>&1 || true`);
+    await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée puis retestez.");
+    (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
 // ===== Reset-only: connect via SSH and reset the default admin password =====
 async function runResetAdminPassword(body: DeployBody, log: (m: string) => Promise<void> | void) {
   const port = body.port ?? 22;
