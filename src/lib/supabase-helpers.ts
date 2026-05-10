@@ -1,12 +1,31 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getSupabasePublishableKey, supabaseEndpoint } from "@/lib/env";
 
+function safeUUID(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  // RFC4122 v4 fallback for non-secure contexts (HTTP)
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export async function uploadMediaFile(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<string> {
   const ext = file.name.split('.').pop();
-  const fileName = `${crypto.randomUUID()}.${ext}`;
+  const fileName = `${safeUUID()}.${ext}`;
 
   const bucketUrl = supabaseEndpoint(`/storage/v1/object/media/${fileName}`);
   const apiKey = getSupabasePublishableKey();
