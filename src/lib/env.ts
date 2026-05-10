@@ -110,8 +110,20 @@ export function explainSupabaseError(error: unknown, context = "Supabase") {
   const httpStatus = anyError?.status || (httpMatch ? parseInt(httpMatch[1], 10) : undefined);
 
   let cause = "Erreur backend non classée";
-  // Fallback action shows the REAL error so user/dev can act on it directly
   let action = message.length > 0 ? message.slice(0, 400) : "Ouvrez la console réseau et vérifiez l'URL appelée, le statut HTTP et la réponse JSON.";
+
+  // PGRST301 / "wrong key type" → JWT signé par une instance Supabase différente (token périmé après redéploiement local)
+  if (anyError?.code === "PGRST301" || lower.includes("no suitable key") || lower.includes("wrong key type") || lower.includes("decode the jwt")) {
+    cause = "Session expirée (clés JWT renouvelées par le serveur)";
+    action = "Votre session a été émise par un ancien déploiement. Déconnexion automatique en cours, reconnectez-vous.";
+    try {
+      // Purge the stale Supabase session from localStorage and force a clean reload
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith("sb-") || k.includes("supabase.auth")) localStorage.removeItem(k);
+      });
+      setTimeout(() => { window.location.href = "/login"; }, 1500);
+    } catch {}
+  }
 
   if (lower.includes("err_cert_authority_invalid") || lower.includes("cert_authority_invalid") || lower.includes("certificate")) {
     cause = "Certificat HTTPS local non reconnu";
