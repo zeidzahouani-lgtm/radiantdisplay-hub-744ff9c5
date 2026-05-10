@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useMedia } from "@/hooks/useMedia";
 import { explainSupabaseError } from "@/lib/env";
+import { normalizeEmbedUrl } from "@/lib/iframe-url";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 interface UploadProgress {
