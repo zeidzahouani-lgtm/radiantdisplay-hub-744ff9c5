@@ -150,6 +150,10 @@ function dockerPsqlSelect(connDir: string, sql: string, silent = true) {
   return `cd ${connDir} && docker compose exec -T --user postgres db sh -lc ${shQuote(psql)}${silent ? " 2>/dev/null || true" : " 2>&1"}`;
 }
 
+function dockerPsqlExec(connDir: string, sql: string) {
+  return dockerPsql(connDir, btoa(sql), true);
+}
+
 interface RemotePreflightResult {
   dockerOk: boolean;
   composeOk: boolean;
