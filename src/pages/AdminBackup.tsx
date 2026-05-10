@@ -1209,6 +1209,41 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
+  // ===== Network management =====
+  const [networkInfo, setNetworkInfo] = useState<any>(null);
+  const [netSubnet, setNetSubnet] = useState("172.28.0.0/16");
+  const [netGateway, setNetGateway] = useState("");
+  const [netName, setNetName] = useState("screenflow_default");
+
+  const handleNetworkInspect = () => {
+    setNetworkInfo(null);
+    runSshAction("network_inspect", {}, {
+      initialLog: "🔎 Inspection du réseau Docker…",
+      successMessage: "Inspection terminée ✓",
+      onResult: (r) => setNetworkInfo(r),
+    });
+  };
+  const handleNetworkRecreate = () => {
+    runSshAction("network_recreate", {}, {
+      initialLog: "♻ Recréation du réseau Docker…",
+      successMessage: "Réseau recréé ✓",
+    });
+  };
+  const handleNetworkSetSubnet = () => {
+    if (!/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(netSubnet.trim())) {
+      toast.error("Sous-réseau invalide (utilisez la notation CIDR, ex: 172.28.0.0/16)");
+      return;
+    }
+    runSshAction("network_set_subnet", {
+      network_subnet: netSubnet.trim(),
+      network_gateway: netGateway.trim() || undefined,
+      network_name: netName.trim() || "screenflow_default",
+    }, {
+      initialLog: `🌐 Application du sous-réseau ${netSubnet} sur ${netName}…`,
+      successMessage: "Sous-réseau appliqué ✓",
+    });
+  };
+
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
     quick_update: { label: "Mise à jour rapide", run: handleQuickUpdate },
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
