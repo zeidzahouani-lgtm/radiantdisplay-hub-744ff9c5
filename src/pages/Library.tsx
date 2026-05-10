@@ -284,7 +284,7 @@ export default function Library() {
           <div className="aspect-video bg-secondary rounded-lg overflow-hidden">
             {preview?.type === "image" && <img src={preview.url} alt={preview.name} className="w-full h-full object-contain" />}
             {preview?.type === "video" && <video src={preview.url} className="w-full h-full" controls autoPlay />}
-            {preview?.type === "iframe" && <iframe src={preview.url} className="w-full h-full border-0" title={preview.name} />}
+            {preview?.type === "iframe" && <iframe src={normalizeEmbedUrl(preview.url).url} className="w-full h-full border-0" title={preview.name} allowFullScreen />}
           </div>
         </DialogContent>
       </Dialog>
