@@ -41,7 +41,6 @@ interface DbData {
 }
 
 export default function AdminServerStatus() {
-  const [host, setHost] = useState(() => localStorage.getItem("server_stats_host") || "");
   const [port, setPort] = useState(() => localStorage.getItem("server_stats_port") || "22");
   const [username, setUsername] = useState(() => localStorage.getItem("server_stats_user") || "root");
   const [password, setPassword] = useState("");
@@ -51,18 +50,17 @@ export default function AdminServerStatus() {
   const [lastFetch, setLastFetch] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    if (!host || !username || !password) {
-      toast.error("Renseignez l'IP, l'utilisateur et le mot de passe");
+    if (!username || !password) {
+      toast.error("Renseignez l'utilisateur et le mot de passe SSH");
       return;
     }
     setLoading(true);
     try {
-      localStorage.setItem("server_stats_host", host);
       localStorage.setItem("server_stats_port", port);
       localStorage.setItem("server_stats_user", username);
 
       const { data, error } = await supabase.functions.invoke("server-stats", {
-        body: { host: host.trim(), port: parseInt(port) || 22, username: username.trim(), password },
+        body: { port: parseInt(port) || 22, username: username.trim(), password },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erreur inconnue");
