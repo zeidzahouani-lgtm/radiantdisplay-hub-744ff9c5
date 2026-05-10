@@ -172,6 +172,7 @@ export default function AdminBackup() {
 
   // SSH Deploy state
   const [sshHost, setSshHost] = useState("");
+  const [sshLocalIp, setSshLocalIp] = useState("127.0.0.1");
   const [sshPort, setSshPort] = useState("22");
   const [sshUser, setSshUser] = useState("root");
   const [sshPassword, setSshPassword] = useState("");
