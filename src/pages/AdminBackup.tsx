@@ -2014,6 +2014,52 @@ To rebuild manually: docker compose up -d --build
                 </Alert>
               )}
 
+              {serverDiag && (
+                <div className="space-y-3 rounded-xl border bg-card/50 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Stethoscope className="h-4 w-4" />Diagnostic serveur
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {serverDiag.checks.filter(c => c.ok).length}/{serverDiag.checks.length} vérifications OK
+                    </span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {serverDiag.checks.map((c) => (
+                      <div key={c.key} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-background border">
+                        {c.ok
+                          ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          : <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">{c.label}</div>
+                          {c.detail && <div className="text-muted-foreground truncate">{c.detail}</div>}
+                          {!c.ok && c.suggested_action && fixActionMap[c.suggested_action] && (
+                            <Button size="sm" variant="outline" className="h-6 mt-1 text-[11px]" onClick={fixActionMap[c.suggested_action].run} disabled={sshDeploying}>
+                              {fixActionMap[c.suggested_action].label}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {serverDiag.suggestions.length > 0 && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Correctifs proposés</AlertTitle>
+                      <AlertDescription>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {serverDiag.suggestions.filter(s => fixActionMap[s]).map((s) => (
+                            <Button key={s} size="sm" variant="secondary" onClick={fixActionMap[s].run} disabled={sshDeploying}>
+                              {fixActionMap[s].label}
+                            </Button>
+                          ))}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
               {sshLogs.length > 0 && (
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2"><Terminal className="h-3.5 w-3.5" />Journal de déploiement</Label>
