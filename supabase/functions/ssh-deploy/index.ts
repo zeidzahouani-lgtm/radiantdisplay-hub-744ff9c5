@@ -1063,6 +1063,8 @@ async function runDeploymentJob(
       await runRepairRealtime(body, log);
     } else if (body.action === "apply_local_migrations") {
       directResult = await runApplyLocalMigrations(body, log);
+    } else if (body.action === "quick_update") {
+      directResult = await runQuickUpdate(body, log);
     } else {
       await runDeployment(body, log);
     }
