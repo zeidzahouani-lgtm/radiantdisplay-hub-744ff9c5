@@ -14,11 +14,17 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet" | "network_set_hostname" | "network_get_config";
   // Custom Docker network subnet (CIDR), e.g. 172.28.0.0/16
   network_subnet?: string;
   network_gateway?: string;
   network_name?: string;
+  network_ip_range?: string;        // CIDR sub-range for auto-assignment
+  network_mtu?: number;             // MTU (e.g. 1500)
+  network_dns?: string[];           // DNS servers for containers
+  container_ips?: Record<string, string>; // service_name -> static IP
+  hostname?: string;                // system hostname
+  hostname_alias?: string;          // /etc/hosts alias for the host IP
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
