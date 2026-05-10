@@ -1791,8 +1791,12 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
     const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY") || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
     if (anonKey) await ensureLocalApiServices(conn, supaDir, kongPort, anonKey, log);
     await exec(conn, `cd ${supaDir} && docker compose restart rest storage kong 2>&1 || true`);
-    await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée puis retestez.");
-    (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true };
+    if (anonKey) {
+      await repairLocalApiUrlOnExistingDeployment(conn, body, kongPort, anonKey, log);
+    }
+    await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée en HTTP puis retestez.");
+    const repairedUrl = `http://${body.host}:${body.app_port || "8080"}`;
+    (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true, url: repairedUrl, supabase_local: anonKey ? { url: repairedUrl, anon_key: anonKey } : null };
   } finally {
     try { conn.end(); } catch (_) {}
   }
