@@ -951,6 +951,7 @@ To rebuild manually: docker compose up -d --build
         body: {
           action: "reset_admin_password",
           host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
           port: parseInt(sshPort) || 22,
           username: sshUser.trim(),
           password: sshPassword,
@@ -1015,6 +1016,7 @@ To rebuild manually: docker compose up -d --build
         body: {
           action: "repair_local_writes",
           host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
           port: parseInt(sshPort) || 22,
           username: sshUser.trim(),
           password: sshPassword,
