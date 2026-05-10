@@ -253,30 +253,14 @@ PY`;
   }
 
   // 3) Last resort: kill any remaining process holding those ports
-  const killScript = `${sudoPrefix}python3 - <<'PY'
-import subprocess
-wanted = ${JSON.stringify(uniquePorts)}
-for p in wanted:
-    try:
-        out = subprocess.run(['sh','-lc', f'(ss -lntp 2>/dev/null || netstat -lntp 2>/dev/null) | awk \\'$4 ~ /:{p}$/ {{print $0}}\\''], capture_output=True, text=True, timeout=5).stdout
-        if not out.strip():
-            continue
-        # extract pids from "users:((\\\"name\\\",pid=1234,fd=...))" or "1234/name"
-        import re
-        pids = set(re.findall(r'pid=(\\d+)', out)) | set(re.findall(r'(\\d+)/', out))
-        for pid in pids:
-            subprocess.run(['sh','-lc', f'kill -9 {pid} 2>/dev/null || true'], timeout=3)
-            print(f"KILLED|{p}|{pid}")
-    except Exception:
-        pass
-print('DONE')
-PY`;
-  const r3 = await exec(conn, killScript);
-  for (const line of (r3.stdout || "").split("\n")) {
-    if (line.startsWith("KILLED|")) {
-      const [, p, pid] = line.split("|");
-      await log(`  • Processus tué (PID ${pid}) sur le port ${p}`);
-    }
+  // Last resort: free remaining ports via fuser/ss
+  for (const p of uniquePorts) {
+    const r = await exec(
+      conn,
+      `${sudoPrefix}sh -c "(fuser -k -n tcp ${p} 2>&1 || true); (ss -lntp 2>/dev/null | awk -v P=:${p} '\\$4 ~ P{print \\$0}')"`,
+    );
+    const out = (r.stdout || "").trim();
+    if (out) await log(`  • Port ${p}: ${out.slice(-200)}`);
   }
   await log("✓ Libération des ports terminée");
 }
