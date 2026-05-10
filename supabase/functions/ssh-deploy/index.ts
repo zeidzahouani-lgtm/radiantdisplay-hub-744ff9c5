@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update";
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -1063,6 +1063,8 @@ async function runDeploymentJob(
       await runRepairRealtime(body, log);
     } else if (body.action === "apply_local_migrations") {
       directResult = await runApplyLocalMigrations(body, log);
+    } else if (body.action === "quick_update") {
+      directResult = await runQuickUpdate(body, log);
     } else {
       await runDeployment(body, log);
     }
@@ -1151,7 +1153,9 @@ Deno.serve(async (req) => {
                       ? "Réparation Realtime lancée en arrière-plan."
                       : action === "apply_local_migrations"
                         ? "Application des migrations locales lancée en arrière-plan."
-                        : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                        : action === "quick_update"
+                          ? "Mise à jour rapide lancée en arrière-plan (git pull + migrations + rebuild web)."
+                          : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2459,6 +2463,143 @@ async function runApplyLocalMigrations(body: DeployBody, log: (m: string) => Pro
       errors,
       items: summary,
     };
+    (globalThis as any).__lastDeployResult = result;
+    return result;
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+// ===== Quick update: pull repo, apply new migrations, sync edge functions, rebuild web only =====
+async function runQuickUpdate(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  const repoDir = `${remoteDir}/repo`;
+  const branch = body.git_branch || "main";
+  const migDir = `${repoDir}/supabase/migrations`;
+
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+
+  const summary: {
+    git: { ok: boolean; commit?: string; changed_files?: number; message?: string };
+    migrations: { applied: number; skipped: number; errors: number; items: Array<{ name: string; status: string; error?: string }> };
+    functions: { ok: boolean };
+    web_rebuild: { ok: boolean };
+  } = {
+    git: { ok: false },
+    migrations: { applied: 0, skipped: 0, errors: 0, items: [] },
+    functions: { ok: false },
+    web_rebuild: { ok: false },
+  };
+
+  try {
+    // Sanity checks
+    const repoPresent = (await exec(conn, `[ -d ${repoDir}/.git ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (!repoPresent) {
+      throw new Error(`Aucun dépôt cloné dans ${repoDir}. Lancez d'abord un déploiement complet.`);
+    }
+    const supaPresent = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+
+    // ===== 1. Git pull =====
+    await log(`→ git fetch + reset --hard origin/${branch}…`);
+    const beforeSha = (await exec(conn, `cd ${repoDir} && git rev-parse HEAD 2>/dev/null || echo none`)).stdout.trim();
+    const pull = await exec(
+      conn,
+      `cd ${repoDir} && git fetch --depth 1 origin ${branch} 2>&1 && git reset --hard origin/${branch} 2>&1 && git clean -fd 2>&1`,
+    );
+    if (pull.code !== 0) {
+      throw new Error(`git pull a échoué : ${pull.stdout.slice(-400)}`);
+    }
+    const afterSha = (await exec(conn, `cd ${repoDir} && git rev-parse HEAD`)).stdout.trim();
+    const diff = await exec(conn, `cd ${repoDir} && git diff --name-only ${beforeSha} ${afterSha} 2>/dev/null | wc -l`);
+    const changedFiles = parseInt(diff.stdout.trim(), 10) || 0;
+    summary.git = {
+      ok: true,
+      commit: afterSha.slice(0, 8),
+      changed_files: changedFiles,
+      message: beforeSha === afterSha ? "Aucun nouveau commit" : `${changedFiles} fichier(s) mis à jour`,
+    };
+    await log(`✓ Repo à jour (HEAD ${afterSha.slice(0, 8)}, ${changedFiles} fichier(s) modifiés)`);
+
+    // ===== 2. Apply pending migrations (idempotent via _lovable.migrations) =====
+    if (supaPresent) {
+      await ensurePostgresSqlAccess(conn, supaDir, log);
+      await exec(conn, dockerPsqlExec(supaDir, `
+        create schema if not exists _lovable;
+        create table if not exists _lovable.migrations(
+          name text primary key,
+          applied_at timestamptz not null default now(),
+          success boolean not null default true,
+          error text
+        );
+      `));
+      const lsOut = await exec(conn, `ls ${migDir}/*.sql 2>/dev/null | sort`);
+      const allFiles = lsOut.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+      const appliedOut = await exec(conn, dockerPsqlSelect(supaDir, "select name from _lovable.migrations where success = true", false));
+      const appliedSet = new Set(
+        appliedOut.stdout.split("\n").map((s) => s.trim()).filter((s) => s && !/^\(\d+ rows?\)$/.test(s)),
+      );
+      const pending = allFiles.filter((f) => !appliedSet.has(f.split("/").pop()!));
+      await log(`→ ${allFiles.length} migration(s) au total, ${pending.length} à appliquer`);
+      for (const fpath of allFiles) {
+        const name = fpath.split("/").pop()!;
+        const safeName = name.replace(/'/g, "''");
+        if (appliedSet.has(name)) {
+          summary.migrations.items.push({ name, status: "skipped" });
+          summary.migrations.skipped++;
+          continue;
+        }
+        await log(`→ Migration: ${name}`);
+        const cmd =
+          `cat ${fpath} | (cd ${supaDir} && docker compose exec -T --user postgres db sh -lc ` +
+          `${shQuote('PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1')}) 2>&1`;
+        const r = await exec(conn, cmd);
+        const tail = (r.stdout || "").split("\n").slice(-10).join("\n").trim();
+        if (r.code === 0) {
+          summary.migrations.applied++;
+          summary.migrations.items.push({ name, status: "applied" });
+          await exec(conn, dockerPsqlExec(supaDir, `insert into _lovable.migrations(name, success, error) values ('${safeName}', true, null) on conflict (name) do update set success=true, error=null, applied_at=now();`));
+          await log(`  ✓ ${name}`);
+        } else {
+          summary.migrations.errors++;
+          const errMsg = tail.replace(/'/g, "''").slice(-800);
+          summary.migrations.items.push({ name, status: "error", error: tail });
+          await exec(conn, dockerPsqlExec(supaDir, `insert into _lovable.migrations(name, success, error) values ('${safeName}', false, '${errMsg}') on conflict (name) do update set success=false, error=excluded.error, applied_at=now();`));
+          await log(`  ✗ ${name}: ${tail.slice(0, 200)}`);
+        }
+      }
+    } else {
+      await log("ℹ Aucune stack Supabase locale détectée — étape migrations ignorée.");
+    }
+
+    // ===== 3. Sync edge functions =====
+    if (supaPresent) {
+      try {
+        await syncLocalEdgeFunctions(conn, remoteDir, supaDir, log);
+        summary.functions.ok = true;
+      } catch (e: any) {
+        await log("⚠ Échec sync fonctions : " + (e?.message || String(e)));
+      }
+    }
+
+    // ===== 4. Rebuild only the web container =====
+    const webPresent = (await exec(conn, `[ -f ${repoDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (webPresent) {
+      await log("→ Rebuild du conteneur web (docker compose up -d --build web)…");
+      const r = await exec(conn, `cd ${repoDir} && (docker compose up -d --build web || docker-compose up -d --build web) 2>&1 | tail -80`);
+      await log(r.stdout.split("\n").slice(-15).join("\n"));
+      summary.web_rebuild.ok = r.code === 0;
+      if (r.code === 0) await log("✓ Conteneur web reconstruit et redémarré");
+    } else {
+      await log("ℹ Aucun docker-compose.yml d'application — étape rebuild ignorée.");
+    }
+
+    const ok = summary.git.ok && summary.migrations.errors === 0 && summary.web_rebuild.ok !== false;
+    await log(`✓ Mise à jour rapide terminée — git: ${summary.git.message}, migrations: ${summary.migrations.applied} appliquées / ${summary.migrations.errors} erreurs, web rebuild: ${summary.web_rebuild.ok ? "OK" : "ignoré"}`);
+    const result = { action: "quick_update", ok, ...summary };
     (globalThis as any).__lastDeployResult = result;
     return result;
   } finally {

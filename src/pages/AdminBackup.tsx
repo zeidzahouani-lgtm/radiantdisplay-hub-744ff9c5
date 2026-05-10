@@ -1182,7 +1182,35 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
+  const [quickUpdateResult, setQuickUpdateResult] = useState<{
+    git?: { ok: boolean; commit?: string; changed_files?: number; message?: string };
+    functions?: { ok: boolean };
+    web_rebuild?: { ok: boolean };
+  } | null>(null);
+  const handleQuickUpdate = () => {
+    setQuickUpdateResult(null);
+    setMigrationResult(null);
+    runSshAction("quick_update", { git_branch: sshGitBranch.trim() || "main" }, {
+      initialLog: "⚡ Mise à jour rapide (git pull + migrations + rebuild web)…",
+      successMessage: "Mise à jour appliquée ✓",
+      onResult: (r) => {
+        if (!r) return;
+        setQuickUpdateResult(r);
+        if (r.migrations?.items) {
+          setMigrationResult({
+            total: r.migrations.items.length,
+            applied: r.migrations.applied || 0,
+            skipped: r.migrations.skipped || 0,
+            errors: r.migrations.errors || 0,
+            items: r.migrations.items,
+          });
+        }
+      },
+    });
+  };
+
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
+    quick_update: { label: "Mise à jour rapide", run: handleQuickUpdate },
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
     repair_local_writes: { label: "Réparer upload/écrans", run: handleRepairLocalWrites },
     repair_local_api_url: { label: "Corriger l'URL API", run: handleRepairApiUrl },
@@ -2003,6 +2031,15 @@ To rebuild manually: docker compose up -d --build
                 </Button>
                 <Button
                   type="button"
+                  className="gap-2 bg-primary"
+                  onClick={handleQuickUpdate}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Tire les derniers commits, applique les migrations manquantes, synchronise les fonctions backend et reconstruit uniquement le conteneur web — sans toucher à Supabase ni reinstaller la stack."
+                >
+                  <Rocket className="h-4 w-4" />Mise à jour rapide
+                </Button>
+                <Button
+                  type="button"
                   variant="secondary"
                   className="gap-2"
                   onClick={handleApplyMigrations}
@@ -2088,6 +2125,44 @@ To rebuild manually: docker compose up -d --build
                       </AlertDescription>
                     </Alert>
                   )}
+                </div>
+              )}
+
+              {quickUpdateResult && (
+                <div className="space-y-2 rounded-xl border bg-card/50 p-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Rocket className="h-4 w-4" />Résumé de la mise à jour rapide
+                  </h3>
+                  <div className="grid sm:grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 rounded-lg bg-background border">
+                      <div className="font-medium flex items-center gap-1">
+                        {quickUpdateResult.git?.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                        Code (git pull)
+                      </div>
+                      <div className="text-muted-foreground mt-1">
+                        {quickUpdateResult.git?.message || "—"}
+                        {quickUpdateResult.git?.commit && <> · <code>{quickUpdateResult.git.commit}</code></>}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-background border">
+                      <div className="font-medium flex items-center gap-1">
+                        {quickUpdateResult.functions?.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground" />}
+                        Fonctions backend
+                      </div>
+                      <div className="text-muted-foreground mt-1">
+                        {quickUpdateResult.functions?.ok ? "Synchronisées" : "Non synchronisées"}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-background border">
+                      <div className="font-medium flex items-center gap-1">
+                        {quickUpdateResult.web_rebuild?.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                        Conteneur web
+                      </div>
+                      <div className="text-muted-foreground mt-1">
+                        {quickUpdateResult.web_rebuild?.ok ? "Reconstruit & redémarré" : "Non reconstruit"}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
