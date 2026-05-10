@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Database, Download, Container, FileArchive, Loader2, Package, FileCode, Copy,
   Upload, CheckCircle2, XCircle, AlertCircle, ServerCog, Rocket, ShieldCheck,
-  Server, Terminal, Wifi, KeyRound, Trash2,
+  Server, Terminal, Wifi, KeyRound, Trash2, Stethoscope, RefreshCw, HardDrive, Radio,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Textarea } from "@/components/ui/textarea";
