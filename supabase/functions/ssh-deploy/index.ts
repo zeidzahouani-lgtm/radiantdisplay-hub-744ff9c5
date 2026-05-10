@@ -130,6 +130,11 @@ const DEFAULT_ADMIN_PASSWORD = "260390DS";
 
 const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
+function resolveBrowserAppBase(body: DeployBody, appPort: string, enableHttps = false, httpsDomain?: string, httpsPort?: string) {
+  const host = (enableHttps ? (httpsDomain || body.host) : body.host).trim();
+  return enableHttps ? `https://${host}:${httpsPort || "8443"}` : `http://${host}:${appPort}`;
+}
+
 function dockerPsql(connDir: string, sqlB64: string, onErrorStop = true) {
   const psql = `PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=${onErrorStop ? 1 : 0}`;
   return `cd ${connDir} && printf '%s' '${sqlB64}' | base64 -d | docker compose exec -T --user postgres db sh -lc ${shQuote(psql)} 2>&1`;
@@ -1281,10 +1286,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         const anonKey = jwtLines[0];
         const serviceKey = jwtLines[1];
 
-        const appPublicUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
+        const appPublicUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
         const supaKongPublicUrl = `http://127.0.0.1:${supaKongPort}`;
-        // Force the deployed app + edge functions to talk to Supabase via the local IP (127.0.0.1 by default)
-        const supaBrowserUrl = `http://${localIp}:${appPort}`;
+        // The browser must use the app proxy on the server address; 127.0.0.1 is only valid inside SSH checks.
+        const supaBrowserUrl = appPublicUrl;
 
         const envPatch = [
           `POSTGRES_PASSWORD=${postgresPw}`,
@@ -1414,7 +1419,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await syncLocalAuthSafeEnv(conn, supaDir, log);
         await startLocalSupabaseEssentials(conn, supaDir, log, true);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
-        const supaBrowserUrl = `http://${localIp}:${appPort}`;
+        const supaBrowserUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
+        await exec(conn, `cd ${supaDir} && for k in SITE_URL API_EXTERNAL_URL SUPABASE_PUBLIC_URL; do sed -i "/^$k=/d" .env; done && printf 'SITE_URL=%s\nAPI_EXTERNAL_URL=%s\nSUPABASE_PUBLIC_URL=%s\n' ${shQuote(supaBrowserUrl)} ${shQuote(supaBrowserUrl)} ${shQuote(supaBrowserUrl)} >> .env && docker compose restart auth storage rest kong 2>&1 || true`);
         supabaseUrlOverride = supaBrowserUrl;
         supabaseAnonOverride = anonKey;
         supabaseProjectIdOverride = "local";
@@ -1671,7 +1677,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     await log("→ Test de connectivité de la stack déployée…");
 
     // App health
-    const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${localIp}:${appPort}`;
+    const appUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
     const localAppUrl = enableHttps ? `https://${localIp}:${httpsPort}` : `http://${localIp}:${appPort}`;
     const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
@@ -1718,7 +1724,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
           await log("✓ Compte admin par défaut prêt — login : screenflow@screenflow.local / 260390DS");
 
           // Confirme explicitement Auth + Storage via l'IP locale
-          await log(`→ Confirmation finale Auth/Storage via ${supaBrowserUrl}…`);
+          await log(`→ Confirmation finale Auth/Storage via ${supabaseUrlOverride || appUrl}…`);
           try {
             await verifyAuthLoginFromServer(
               conn,
@@ -1772,11 +1778,11 @@ async function repairLocalApiUrlOnExistingDeployment(conn: Client, body: DeployB
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
   const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
-  const publicBase = `http://${localIp}:${appPort}`;
+  const publicBase = resolveBrowserAppBase(body, appPort);
   const repoDir = `${remoteDir}/repo`;
   const supaDir = `${remoteDir}/supabase`;
 
-  await log(`→ Réparation URL API navigateur : ${publicBase} (vérification locale via ${localIp})`);
+  await log(`→ Réparation URL API navigateur : ${publicBase} (vérifications serveur via ${localIp})`);
 
   const nginxConf = `client_max_body_size 1024m;
 server {
@@ -1822,7 +1828,7 @@ s = re.sub(r"VITE_SUPABASE_PROJECT_ID:\\s*.*", "VITE_SUPABASE_PROJECT_ID: 'local
 p.write_text(s)
 PY`;
   await exec(conn, patchCompose);
-  await exec(conn, `cd ${supaDir} && for k in SITE_URL SUPABASE_PUBLIC_URL; do sed -i "/^$k=/d" .env; done && printf 'SITE_URL=%s\nSUPABASE_PUBLIC_URL=%s\n' ${shQuote(publicBase)} ${shQuote(publicBase)} >> .env && docker compose restart auth storage rest kong 2>&1 || true`);
+  await exec(conn, `cd ${supaDir} && for k in SITE_URL API_EXTERNAL_URL SUPABASE_PUBLIC_URL; do sed -i "/^$k=/d" .env; done && printf 'SITE_URL=%s\nAPI_EXTERNAL_URL=%s\nSUPABASE_PUBLIC_URL=%s\n' ${shQuote(publicBase)} ${shQuote(publicBase)} ${shQuote(publicBase)} >> .env && docker compose restart auth storage rest kong 2>&1 || true`);
   await exec(conn, `cd ${repoDir} && (docker compose up -d --build web || docker-compose up -d --build web) 2>&1`);
   // Vérification depuis le serveur via 127.0.0.1 (évite DNS public + cert auto-signé)
   const probe = await exec(conn, `curl -sS -m 10 -o /tmp/sf_proxy_bucket.txt -w "%{http_code}" ${shQuote(`http://127.0.0.1:${kongPort}/storage/v1/bucket`)} -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || true`);
@@ -1876,8 +1882,7 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
       await repairLocalApiUrlOnExistingDeployment(conn, body, kongPort, anonKey, log);
     }
     await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée en HTTP puis retestez.");
-    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
-    const repairedUrl = `http://${localIp}:${body.app_port || "8080"}`;
+    const repairedUrl = resolveBrowserAppBase(body, body.app_port || "8080");
     (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true, url: repairedUrl, supabase_local: anonKey ? { url: repairedUrl, anon_key: anonKey } : null };
   } finally {
     try { conn.end(); } catch (_) {}
