@@ -808,6 +808,7 @@ To rebuild manually: docker compose up -d --build
         headers: { Authorization: `Bearer ${accessToken}` },
         body: {
           host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
           port: parseInt(sshPort) || 22,
           username: sshUser.trim(),
           password: sshPassword,
