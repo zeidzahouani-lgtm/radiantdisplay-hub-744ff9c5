@@ -188,6 +188,99 @@ function validateDistinctPorts(ports: Array<{ label: string; value: string }>) {
   }
 }
 
+async function freeRemotePorts(
+  conn: Client,
+  ports: string[],
+  sudoPrefix: string,
+  log: (m: string) => Promise<void> | void,
+) {
+  if (ports.length === 0) return;
+  const uniquePorts = Array.from(new Set(ports.map((p) => String(p).trim()).filter(Boolean)));
+  await log(`→ Libération forcée des ports: ${uniquePorts.join(", ")}…`);
+
+  // 1) Stop docker containers binding any of the requested host ports
+  const containerScript = `python3 - <<'PY'
+import json, subprocess
+wanted = set(${JSON.stringify(uniquePorts)})
+try:
+    out = subprocess.run(['sh','-lc','docker ps --format "{{.ID}}|{{.Names}}|{{.Ports}}"'], capture_output=True, text=True, timeout=8).stdout
+except Exception:
+    out = ''
+to_stop = []
+for line in out.splitlines():
+    parts = line.split('|', 2)
+    if len(parts) < 3: continue
+    cid, name, ports = parts
+    for tok in ports.replace(',', ' ').split():
+        # Examples: 0.0.0.0:80->80/tcp, :::443->443/tcp, [::]:8080->80/tcp
+        if '->' not in tok: continue
+        host = tok.split('->')[0]
+        # extract trailing :PORT
+        try:
+            host_port = host.rsplit(':', 1)[1]
+        except Exception:
+            continue
+        if host_port in wanted:
+            to_stop.append((cid, name, host_port))
+            break
+for cid, name, hp in to_stop:
+    print(f"STOP|{cid}|{name}|{hp}")
+    subprocess.run(['sh','-lc', f'docker stop {cid} >/dev/null 2>&1 && docker rm -f {cid} >/dev/null 2>&1 || true'], timeout=15)
+print('DONE')
+PY`;
+  const r1 = await exec(conn, containerScript);
+  for (const line of (r1.stdout || "").split("\n")) {
+    if (line.startsWith("STOP|")) {
+      const [, cid, name, hp] = line.split("|");
+      await log(`  • Conteneur arrêté: ${name} (${cid.slice(0, 12)}) sur le port ${hp}`);
+    }
+  }
+
+  // 2) If 80/443 are requested, stop common host web servers
+  const needsWeb = uniquePorts.some((p) => p === "80" || p === "443");
+  if (needsWeb) {
+    await log("→ Arrêt des services système susceptibles d'occuper 80/443 (nginx, apache2, httpd, lighttpd, caddy)…");
+    const services = ["nginx", "apache2", "httpd", "lighttpd", "caddy"];
+    for (const svc of services) {
+      const r = await exec(
+        conn,
+        `${sudoPrefix}sh -c "if systemctl list-unit-files | grep -q '^${svc}\\.service'; then systemctl stop ${svc} 2>&1; systemctl disable ${svc} 2>&1; echo STOPPED_${svc}; fi" || true`,
+      );
+      if ((r.stdout || "").includes(`STOPPED_${svc}`)) {
+        await log(`  • Service système arrêté et désactivé: ${svc}`);
+      }
+    }
+  }
+
+  // 3) Last resort: kill any remaining process holding those ports
+  const killScript = `${sudoPrefix}python3 - <<'PY'
+import subprocess
+wanted = ${JSON.stringify(uniquePorts)}
+for p in wanted:
+    try:
+        out = subprocess.run(['sh','-lc', f'(ss -lntp 2>/dev/null || netstat -lntp 2>/dev/null) | awk \\'$4 ~ /:{p}$/ {{print $0}}\\''], capture_output=True, text=True, timeout=5).stdout
+        if not out.strip():
+            continue
+        # extract pids from "users:((\\\"name\\\",pid=1234,fd=...))" or "1234/name"
+        import re
+        pids = set(re.findall(r'pid=(\\d+)', out)) | set(re.findall(r'(\\d+)/', out))
+        for pid in pids:
+            subprocess.run(['sh','-lc', f'kill -9 {pid} 2>/dev/null || true'], timeout=3)
+            print(f"KILLED|{p}|{pid}")
+    except Exception:
+        pass
+print('DONE')
+PY`;
+  const r3 = await exec(conn, killScript);
+  for (const line of (r3.stdout || "").split("\n")) {
+    if (line.startsWith("KILLED|")) {
+      const [, p, pid] = line.split("|");
+      await log(`  • Processus tué (PID ${pid}) sur le port ${p}`);
+    }
+  }
+  await log("✓ Libération des ports terminée");
+}
+
 async function checkRemotePortsAvailable(
   conn: Client,
   ports: Array<{ label: string; value: string; required: boolean }>,
