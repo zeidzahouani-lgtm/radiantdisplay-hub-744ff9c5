@@ -1322,7 +1322,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         log(`✓ Supabase local démarré`);
         log(`  • API app: ${supaBrowserUrl} (proxy sécurisé via l'application)`);
         log(`  • API locale serveur: ${supaKongPublicUrl}`);
-        log(`  • Studio: http://${body.host}:${supaStudioPort}  (admin / ${dashboardPw})`);
+        log(`  • Studio: http://${localIp}:${supaStudioPort}  (admin / ${dashboardPw})`);
         log(`  • DB locale serveur: postgres://postgres:${postgresPw}@127.0.0.1:${supaDbPort}/postgres`);
         log(`  ⚠ Notez le mot de passe du dashboard, il ne sera pas réaffiché.`);
 
