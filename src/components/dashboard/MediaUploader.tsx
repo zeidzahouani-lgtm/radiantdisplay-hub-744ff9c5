@@ -118,10 +118,23 @@ export function MediaUploader() {
             onChange={(e) => setIframeName(e.target.value)}
           />
           <Input
-            placeholder="URL (ex: https://docs.google.com/presentation/d/.../embed)"
+            placeholder="URL (Google Slides, PowerPoint Online, SharePoint, YouTube…)"
             value={iframeUrl}
             onChange={(e) => setIframeUrl(e.target.value)}
           />
+          {iframeUrl.trim() && (() => {
+            const n = normalizeEmbedUrl(iframeUrl);
+            return (
+              <div className={`text-xs rounded-lg border p-2 ${n.changed ? "border-primary/40 bg-primary/5" : "border-border bg-muted/30"}`}>
+                <div className="font-medium">
+                  {n.changed ? "URL normalisée automatiquement" : "URL prête à l'emploi"}
+                  <Badge variant="outline" className="ml-1 text-[10px]">{n.source}</Badge>
+                </div>
+                {n.note && <div className="text-muted-foreground mt-1">{n.note}</div>}
+                <code className="block mt-1 break-all text-[10px] text-muted-foreground">{n.url}</code>
+              </div>
+            );
+          })()}
           <Button onClick={handleAddIframe} size="sm">Ajouter</Button>
         </Card>
       )}
