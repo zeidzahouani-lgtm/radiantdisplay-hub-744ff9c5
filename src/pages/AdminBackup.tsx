@@ -2031,6 +2031,15 @@ To rebuild manually: docker compose up -d --build
                 </Button>
                 <Button
                   type="button"
+                  className="gap-2 bg-primary"
+                  onClick={handleQuickUpdate}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Tire les derniers commits, applique les migrations manquantes, synchronise les fonctions backend et reconstruit uniquement le conteneur web — sans toucher à Supabase ni reinstaller la stack."
+                >
+                  <Rocket className="h-4 w-4" />Mise à jour rapide
+                </Button>
+                <Button
+                  type="button"
                   variant="secondary"
                   className="gap-2"
                   onClick={handleApplyMigrations}
