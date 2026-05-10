@@ -82,7 +82,7 @@ const App = () => (
               <Route path="/player/:id" element={<Player />} />
               <Route path="/upload/:id" element={<UploadPage />} />
               <Route path="/assign-license/:screenId" element={<ProtectedRoute><AssignLicense /></ProtectedRoute>} />
-              <Route path="/admin/first-login" element={<Navigate to="/" replace />} />
+              <Route path="/admin/first-login" element={<PublicRoute><FirstAdminLogin /></PublicRoute>} />
 
               <Route element={<ProtectedRoute><EstablishmentProvider><DashboardLayout /></EstablishmentProvider></ProtectedRoute>}>
                 <Route path="/" element={<DashboardHome />} />
