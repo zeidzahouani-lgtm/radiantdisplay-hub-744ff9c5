@@ -1063,6 +1063,114 @@ To rebuild manually: docker compose up -d --build
     }
   };
 
+  // ===== Generic SSH action runner with polling =====
+  type DiagCheck = { key: string; label: string; ok: boolean; detail?: string; suggested_action?: string };
+  const [serverDiag, setServerDiag] = useState<{ checks: DiagCheck[]; suggestions: string[] } | null>(null);
+
+  const runSshAction = async (
+    action: string,
+    extra: Record<string, any> = {},
+    opts: { successMessage?: string; onResult?: (r: any) => void; initialLog?: string } = {},
+  ) => {
+    if (!sshHost || !sshUser || !sshPassword) {
+      toast.error("Renseignez l'IP, l'utilisateur et le mot de passe SSH");
+      return;
+    }
+    setSshDeploying(true);
+    setSshLogs([opts.initialLog || `▶ Action: ${action}`]);
+    try {
+      const accessToken = await getFreshAccessToken();
+      if (!accessToken) return;
+      const { data, error } = await supabase.functions.invoke("ssh-deploy", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: {
+          action,
+          host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
+          port: parseInt(sshPort) || 22,
+          username: sshUser.trim(),
+          password: sshPassword,
+          remote_dir: sshRemoteDir.trim() || "/opt/screenflow",
+          app_port: sshAppPort,
+          supabase_kong_http_port: sshSupaKongPort,
+          ...extra,
+        },
+      });
+      if (error) throw error;
+      const jobId = data?.job_id as string | undefined;
+      if (!jobId) throw new Error("Job non démarré");
+      const settingsKey = `ssh_deploy_job:${jobId}`;
+      const start = Date.now();
+      while (Date.now() - start < 5 * 60 * 1000) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const { data: row } = await supabase.from("app_settings").select("value").eq("key", settingsKey).maybeSingle();
+        if (!row?.value) continue;
+        let parsed: any;
+        try { parsed = JSON.parse(row.value as string); } catch { continue; }
+        if (Array.isArray(parsed.logs)) setSshLogs(parsed.logs);
+        if (parsed.status === "success") {
+          if (opts.onResult) opts.onResult(parsed.result || null);
+          toast.success(opts.successMessage || "Action terminée ✓");
+          return;
+        }
+        if (parsed.status === "error") {
+          toast.error("Échec : " + (parsed.error || "inconnu"));
+          return;
+        }
+      }
+      toast.warning("Délai dépassé — consultez les logs.");
+    } catch (e: any) {
+      setSshLogs((prev) => [...prev, "✗ Erreur: " + (e?.message || String(e))]);
+      toast.error("Erreur: " + (e?.message || String(e)));
+    } finally {
+      setSshDeploying(false);
+    }
+  };
+
+  const handleDiagnoseServer = () =>
+    runSshAction("diagnose_server", {}, {
+      initialLog: "🔎 Diagnostic du serveur en cours…",
+      successMessage: "Diagnostic terminé",
+      onResult: (r) => {
+        if (r?.checks) setServerDiag({ checks: r.checks, suggestions: r.suggestions || [] });
+      },
+    });
+
+  const handleRestartStack = () =>
+    runSshAction("restart_stack", {}, {
+      initialLog: "🔄 Redémarrage de la stack Docker…",
+      successMessage: "Stack redémarrée ✓",
+    });
+
+  const handleRepairBuckets = () =>
+    runSshAction("repair_storage_buckets", {}, {
+      initialLog: "🪣 Réparation des buckets Storage…",
+      successMessage: "Buckets réparés ✓",
+    });
+
+  const handleRepairRealtime = () =>
+    runSshAction("repair_realtime", {}, {
+      initialLog: "📡 Réparation Realtime…",
+      successMessage: "Realtime réparé ✓",
+    });
+
+  const handleRepairApiUrl = () =>
+    runSshAction("repair_local_api_url", {}, {
+      initialLog: "🌐 Correction de l'URL API locale…",
+      successMessage: "URL API corrigée ✓",
+      onResult: (r) => { if (r?.url) handleDeploySuccess(r.url, r.supabase_local || null); },
+    });
+
+  const fixActionMap: Record<string, { label: string; run: () => void }> = {
+    restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
+    repair_local_writes: { label: "Réparer upload/écrans", run: handleRepairLocalWrites },
+    repair_local_api_url: { label: "Corriger l'URL API", run: handleRepairApiUrl },
+    repair_storage_buckets: { label: "Réparer buckets Storage", run: handleRepairBuckets },
+    repair_realtime: { label: "Réparer Realtime", run: handleRepairRealtime },
+    reset_admin_password: { label: "Créer/réparer admin", run: handleResetAdminPassword },
+    redeploy: { label: "Relancer un déploiement complet", run: () => toast.info("Lancez 'Déployer maintenant' ci-dessous.") },
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-6xl">
       <div>
