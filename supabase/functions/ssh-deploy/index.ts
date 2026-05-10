@@ -1312,6 +1312,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         isExistingSupabase = false;
       }
 
+      if (forceFreshInstall) {
+        await freeRemotePorts(conn, requestedPorts.filter(p => p.required).map(p => p.value), sudoPrefix, log);
+      }
+
       const ignoredPortDirs = forceFreshInstall ? [] : [`${remoteDir}/repo`, `${remoteDir}/supabase`];
       await checkRemotePortsAvailable(conn, requestedPorts, log, ignoredPortDirs);
 
