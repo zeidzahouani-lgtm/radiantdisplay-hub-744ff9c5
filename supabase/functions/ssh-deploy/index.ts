@@ -1180,7 +1180,11 @@ Deno.serve(async (req) => {
                             : action === "network_recreate"
                               ? "Recréation du réseau Docker lancée en arrière-plan."
                               : action === "network_set_subnet"
-                                ? "Application du sous-réseau personnalisé lancée en arrière-plan."
+                                ? "Application de la configuration réseau Docker lancée en arrière-plan."
+                                : action === "network_set_hostname"
+                                  ? "Mise à jour du hostname système lancée en arrière-plan."
+                                  : action === "network_get_config"
+                                    ? "Lecture de la configuration réseau lancée en arrière-plan."
                                 : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
