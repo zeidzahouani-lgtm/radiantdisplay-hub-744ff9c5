@@ -1468,6 +1468,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         }
         log(applyMig.stdout.slice(-1500));
         log("✓ Migrations appliquées (les erreurs 'already exists' sont normales)");
+        await log("→ Application automatique de la réparation upload/écrans incluse au déploiement…");
         await applyLocalDashboardWriteHotfix(conn, pending.supaDir, log);
         await syncLocalEdgeFunctions(conn, remoteDir, pending.supaDir, log);
         if (supabaseAnonOverride) {
@@ -1649,9 +1650,10 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
 
     // App health
     const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
-    const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${appUrl} || echo FAIL`);
+    const localAppUrl = enableHttps ? `https://127.0.0.1:${httpsPort}` : `http://127.0.0.1:${appPort}`;
+    const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
-    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${appUrl}` };
+    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${localAppUrl} (local serveur)` };
     await log(`  • App         : ${connectivity.app.ok ? "✓" : "✗"} ${connectivity.app.detail}`);
 
     if (installSupabase) {
