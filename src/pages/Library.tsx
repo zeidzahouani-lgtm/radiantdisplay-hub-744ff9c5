@@ -56,8 +56,9 @@ export default function Library() {
           },
         });
         toast.success(`${file.name} uploadé`);
-      } catch {
-        toast.error(`Erreur: ${file.name}`);
+      } catch (err: any) {
+        const diag = explainSupabaseError(err, `Upload ${file.name}`);
+        toast.error(`Upload impossible: ${diag.cause}`, { description: diag.action });
       }
     }
     setUploads([]);
