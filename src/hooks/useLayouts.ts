@@ -79,26 +79,6 @@ export function useLayouts() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["layouts"] }),
   });
 
-  const addLayout = useMutation({
-    mutationFn: async (params: { name: string; width?: number; height?: number; wall_id?: string | null; wall_mode?: 'single' | 'stretched' | 'tiled' }) => {
-      const { data, error } = await supabase
-        .from("layouts")
-        .insert({
-          name: params.name,
-          width: params.width || 1920,
-          height: params.height || 1080,
-          user_id: null,
-          establishment_id: currentEstablishmentId,
-          wall_id: params.wall_id ?? null,
-          wall_mode: params.wall_mode ?? 'single',
-        } as any)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["layouts"] }),
-  });
 
   const deleteLayout = useMutation({
     mutationFn: async (id: string) => {
