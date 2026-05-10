@@ -1163,6 +1163,25 @@ To rebuild manually: docker compose up -d --build
       onResult: (r) => { if (r?.url) handleDeploySuccess(r.url, r.supabase_local || null); },
     });
 
+  const handleApplyMigrations = () => {
+    setMigrationResult(null);
+    runSshAction("apply_local_migrations", {}, {
+      initialLog: "🗃 Application des migrations manquantes…",
+      successMessage: "Migrations appliquées ✓",
+      onResult: (r) => {
+        if (r && Array.isArray(r.items)) {
+          setMigrationResult({
+            total: r.total ?? r.items.length,
+            applied: r.applied ?? 0,
+            skipped: r.skipped ?? 0,
+            errors: r.errors ?? 0,
+            items: r.items,
+          });
+        }
+      },
+    });
+  };
+
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
     repair_local_writes: { label: "Réparer upload/écrans", run: handleRepairLocalWrites },
