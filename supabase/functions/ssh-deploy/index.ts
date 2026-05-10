@@ -2251,8 +2251,10 @@ async function runDiagnoseServer(
 
     const failures = checks.filter((c) => !c.ok);
     const suggestions = Array.from(new Set(failures.map((c) => c.suggested_action).filter(Boolean))) as string[];
+    const result = { action: "diagnose_server", checks, suggestions };
     await persist({ status: "running", diagnostic: { checks, suggestions } });
-    (globalThis as any).__lastDeployResult = { action: "diagnose_server", checks, suggestions };
+    (globalThis as any).__lastDeployResult = result;
+    return result;
   } finally {
     try { conn.end(); } catch (_) {}
   }
