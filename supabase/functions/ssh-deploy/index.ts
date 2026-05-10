@@ -2203,7 +2203,7 @@ async function runDiagnoseServer(
         const rest = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/rest/v1/ -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || echo 000`);
         const stor = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/storage/v1/bucket -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || echo 000`);
         const rt = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/realtime/v1/ 2>/dev/null || echo 000`);
-        const okHttp = (s: string) => /^(2|3|401|403|404)/.test(s.trim());
+        const okHttp = (s: string) => /^(2|3|401|403|404|426)/.test(s.trim());
         add({ key: "http_auth", label: "Auth HTTP", ok: okHttp(auth.stdout), detail: auth.stdout.trim(), suggested_action: okHttp(auth.stdout) ? undefined : "restart_stack" });
         add({ key: "http_rest", label: "REST HTTP", ok: okHttp(rest.stdout), detail: rest.stdout.trim(), suggested_action: okHttp(rest.stdout) ? undefined : "repair_local_writes" });
         add({ key: "http_storage", label: "Storage HTTP", ok: okHttp(stor.stdout), detail: stor.stdout.trim(), suggested_action: okHttp(stor.stdout) ? undefined : "repair_local_writes" });
