@@ -2068,7 +2068,7 @@ To rebuild manually: docker compose up -d --build
                 <div className="text-sm">
                   <p className="font-medium flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" />Réinstallation complète si un serveur existe</p>
                   <p className="text-xs text-muted-foreground">
-                    Optionnel : si une installation existe dans le dossier distant, le script arrête les conteneurs, supprime l'app et Supabase local, puis recommence depuis zéro.
+                    Si activé : arrête et supprime l'app et Supabase local existants, puis libère automatiquement les ports demandés (arrêt des conteneurs Docker concurrents, désactivation de nginx/apache/httpd/lighttpd/caddy si vous utilisez 80/443, et <code>fuser -k</code> en dernier recours). Vous pouvez ainsi saisir directement <code>80</code> et <code>443</code> dans les ports application.
                   </p>
                 </div>
               </div>
