@@ -44,10 +44,14 @@ export function useMedia() {
 
   const addIframeMutation = useMutation({
     mutationFn: async ({ name, url }: { name: string; url: string }) => {
+      const { normalizeEmbedUrl, validateEmbedUrl } = await import("@/lib/iframe-url");
+      const v = validateEmbedUrl(url);
+      if (!v.valid) throw new Error(v.reason || "URL invalide");
+      const normalized = normalizeEmbedUrl(url).url;
       const { error } = await supabase.from("media").insert({
         name,
         type: 'iframe',
-        url,
+        url: normalized,
         duration: 30,
         user_id: user?.id ?? null,
         establishment_id: currentEstablishmentId,

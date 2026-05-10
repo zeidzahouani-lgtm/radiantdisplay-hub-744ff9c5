@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useMedia } from "@/hooks/useMedia";
 import { explainSupabaseError } from "@/lib/env";
+import { normalizeEmbedUrl } from "@/lib/iframe-url";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 interface UploadProgress {
@@ -54,13 +56,14 @@ export function MediaUploader() {
   const handleAddIframe = async () => {
     if (!iframeName || !iframeUrl) return;
     try {
+      const n = normalizeEmbedUrl(iframeUrl);
       await addIframeMutation.mutateAsync({ name: iframeName, url: iframeUrl });
-      toast.success("iFrame ajouté");
+      toast.success("iFrame ajouté", { description: n.changed ? n.note : undefined });
       setIframeName("");
       setIframeUrl("");
       setShowIframe(false);
-    } catch {
-      toast.error("Erreur lors de l'ajout");
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur lors de l'ajout");
     }
   };
 
@@ -115,10 +118,23 @@ export function MediaUploader() {
             onChange={(e) => setIframeName(e.target.value)}
           />
           <Input
-            placeholder="URL (ex: https://docs.google.com/presentation/d/.../embed)"
+            placeholder="URL (Google Slides, PowerPoint Online, SharePoint, YouTube…)"
             value={iframeUrl}
             onChange={(e) => setIframeUrl(e.target.value)}
           />
+          {iframeUrl.trim() && (() => {
+            const n = normalizeEmbedUrl(iframeUrl);
+            return (
+              <div className={`text-xs rounded-lg border p-2 ${n.changed ? "border-primary/40 bg-primary/5" : "border-border bg-muted/30"}`}>
+                <div className="font-medium">
+                  {n.changed ? "URL normalisée automatiquement" : "URL prête à l'emploi"}
+                  <Badge variant="outline" className="ml-1 text-[10px]">{n.source}</Badge>
+                </div>
+                {n.note && <div className="text-muted-foreground mt-1">{n.note}</div>}
+                <code className="block mt-1 break-all text-[10px] text-muted-foreground">{n.url}</code>
+              </div>
+            );
+          })()}
           <Button onClick={handleAddIframe} size="sm">Ajouter</Button>
         </Card>
       )}
