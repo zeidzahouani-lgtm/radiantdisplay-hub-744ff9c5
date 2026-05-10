@@ -1043,6 +1043,8 @@ async function runDeploymentJob(
 
   try {
     await persist({ status: "running", logs: [] });
+    let directResult: any = null;
+    (globalThis as any).__lastDeployResult = null;
     if (body.action === "reset_admin_password") {
       await runResetAdminPassword(body, log);
     } else if (body.action === "check_admin_status") {
@@ -1052,7 +1054,7 @@ async function runDeploymentJob(
     } else if (body.action === "repair_local_api_url") {
       await runRepairLocalApiUrl(body, log);
     } else if (body.action === "diagnose_server") {
-      await runDiagnoseServer(body, log, persist);
+      directResult = await runDiagnoseServer(body, log, persist);
     } else if (body.action === "restart_stack") {
       await runRestartStack(body, log);
     } else if (body.action === "repair_storage_buckets") {
@@ -1062,7 +1064,8 @@ async function runDeploymentJob(
     } else {
       await runDeployment(body, log);
     }
-    await persist({ status: "success", logs, result: (globalThis as any).__lastDeployResult || null });
+    const result = directResult ?? (globalThis as any).__lastDeployResult ?? null;
+    await persist({ status: "success", logs, result });
   } catch (e: any) {
     logs.push("✗ ERROR: " + (e?.message || String(e)));
     await persist({ status: "error", logs, error: e?.message || String(e) });
