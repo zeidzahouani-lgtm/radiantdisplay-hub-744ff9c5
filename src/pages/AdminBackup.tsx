@@ -172,6 +172,7 @@ export default function AdminBackup() {
 
   // SSH Deploy state
   const [sshHost, setSshHost] = useState("");
+  const [sshLocalIp, setSshLocalIp] = useState("127.0.0.1");
   const [sshPort, setSshPort] = useState("22");
   const [sshUser, setSshUser] = useState("root");
   const [sshPassword, setSshPassword] = useState("");
@@ -259,6 +260,7 @@ export default function AdminBackup() {
       if (!raw) return;
       const c = JSON.parse(raw);
       if (c.sshHost) setSshHost(c.sshHost);
+      if (c.sshLocalIp) setSshLocalIp(c.sshLocalIp);
       if (c.sshPort) setSshPort(c.sshPort);
       if (c.sshUser) setSshUser(c.sshUser);
       if (c.sshRemoteDir) setSshRemoteDir(c.sshRemoteDir);
@@ -285,7 +287,7 @@ export default function AdminBackup() {
   const persistSshConfig = (extra?: Record<string, any>) => {
     try {
       const payload = {
-        sshHost, sshPort, sshUser, sshRemoteDir, sshAppPort, sshAutoInstallDocker,
+        sshHost, sshLocalIp, sshPort, sshUser, sshRemoteDir, sshAppPort, sshAutoInstallDocker,
         sshGitUrl, sshGitBranch,
         sshEnableHttps, sshHttpsPort, sshHttpsDomain,
         sshIsolateBackend, sshSupabaseUrl, sshSupabaseKey, sshSupabaseProjectId,
@@ -806,6 +808,7 @@ To rebuild manually: docker compose up -d --build
         headers: { Authorization: `Bearer ${accessToken}` },
         body: {
           host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
           port: parseInt(sshPort) || 22,
           username: sshUser.trim(),
           password: sshPassword,
@@ -948,6 +951,7 @@ To rebuild manually: docker compose up -d --build
         body: {
           action: "reset_admin_password",
           host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
           port: parseInt(sshPort) || 22,
           username: sshUser.trim(),
           password: sshPassword,
@@ -1012,6 +1016,7 @@ To rebuild manually: docker compose up -d --build
         body: {
           action: "repair_local_writes",
           host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
           port: parseInt(sshPort) || 22,
           username: sshUser.trim(),
           password: sshPassword,
@@ -1517,8 +1522,13 @@ To rebuild manually: docker compose up -d --build
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2"><Server className="h-3.5 w-3.5" />Adresse IP / Hostname</Label>
+                  <Label className="flex items-center gap-2"><Server className="h-3.5 w-3.5" />Adresse IP / Hostname (publique)</Label>
                   <Input value={sshHost} onChange={e => setSshHost(e.target.value)} placeholder="123.45.67.89" disabled={sshDeploying} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2"><Server className="h-3.5 w-3.5" />Adresse IP locale du serveur</Label>
+                  <Input value={sshLocalIp} onChange={e => setSshLocalIp(e.target.value)} placeholder="127.0.0.1" disabled={sshDeploying} />
+                  <p className="text-[11px] text-muted-foreground">Utilisée pour les vérifications internes et la connexion à la base de données depuis le serveur (par défaut <code>127.0.0.1</code>).</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Port SSH</Label>
