@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations";
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -1061,6 +1061,8 @@ async function runDeploymentJob(
       await runRepairStorageBuckets(body, log);
     } else if (body.action === "repair_realtime") {
       await runRepairRealtime(body, log);
+    } else if (body.action === "apply_local_migrations") {
+      directResult = await runApplyLocalMigrations(body, log);
     } else {
       await runDeployment(body, log);
     }
@@ -1147,7 +1149,9 @@ Deno.serve(async (req) => {
                     ? "Réparation des buckets Storage lancée en arrière-plan."
                     : action === "repair_realtime"
                       ? "Réparation Realtime lancée en arrière-plan."
-                      : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                      : action === "apply_local_migrations"
+                        ? "Application des migrations locales lancée en arrière-plan."
+                        : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2375,3 +2379,89 @@ async function runRepairRealtime(body: DeployBody, log: (m: string) => Promise<v
   }
 }
 
+
+// ===== Apply local app migrations and report a summary =====
+async function runApplyLocalMigrations(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  const migDir = `${remoteDir}/repo/supabase/migrations`;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const supaPresent = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (!supaPresent) throw new Error(`Aucune stack Supabase locale dans ${supaDir}`);
+    const migPresent = (await exec(conn, `[ -d ${migDir} ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (!migPresent) throw new Error(`Dossier de migrations introuvable (${migDir}). Lancez d'abord un déploiement complet pour cloner le dépôt.`);
+    await ensurePostgresSqlAccess(conn, supaDir, log);
+
+    // Init tracking schema/table
+    await exec(conn, dockerPsqlExec(supaDir, `
+      create schema if not exists _lovable;
+      create table if not exists _lovable.migrations(
+        name text primary key,
+        applied_at timestamptz not null default now(),
+        success boolean not null default true,
+        error text
+      );
+    `));
+
+    // List all migration files
+    const lsOut = await exec(conn, `ls ${migDir}/*.sql 2>/dev/null | sort`);
+    const allFiles = lsOut.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+    await log(`→ ${allFiles.length} fichier(s) de migration détecté(s)`);
+
+    // Already applied (success)
+    const appliedOut = await exec(conn, dockerPsqlSelect(supaDir, "select name from _lovable.migrations where success = true", false));
+    const appliedSet = new Set(
+      appliedOut.stdout.split("\n").map((s) => s.trim()).filter((s) => s && !/^\(\d+ rows?\)$/.test(s)),
+    );
+
+    const summary: Array<{ name: string; status: "applied" | "skipped" | "error"; error?: string }> = [];
+    let applied = 0, skipped = 0, errors = 0;
+
+    for (const fpath of allFiles) {
+      const name = fpath.split("/").pop()!;
+      const safeName = name.replace(/'/g, "''");
+      if (appliedSet.has(name)) {
+        summary.push({ name, status: "skipped" });
+        skipped++;
+        continue;
+      }
+      await log(`→ Application: ${name}`);
+      const cmd =
+        `cat ${fpath} | (cd ${supaDir} && docker compose exec -T --user postgres db sh -lc ` +
+        `${shQuote('PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1')}) 2>&1`;
+      const r = await exec(conn, cmd);
+      const tail = (r.stdout || "").split("\n").slice(-10).join("\n").trim();
+      if (r.code === 0) {
+        applied++;
+        summary.push({ name, status: "applied" });
+        await exec(conn, dockerPsqlExec(supaDir, `insert into _lovable.migrations(name, success, error) values ('${safeName}', true, null) on conflict (name) do update set success=true, error=null, applied_at=now();`));
+        await log(`  ✓ ${name}`);
+      } else {
+        errors++;
+        const errMsg = tail.replace(/'/g, "''").slice(-800);
+        summary.push({ name, status: "error", error: tail });
+        await exec(conn, dockerPsqlExec(supaDir, `insert into _lovable.migrations(name, success, error) values ('${safeName}', false, '${errMsg}') on conflict (name) do update set success=false, error=excluded.error, applied_at=now();`));
+        await log(`  ✗ ${name}: ${tail.slice(0, 200)}`);
+      }
+    }
+
+    await log(`✓ Terminé — appliquées: ${applied}, déjà à jour: ${skipped}, erreurs: ${errors}`);
+    const result = {
+      action: "apply_local_migrations",
+      ok: errors === 0,
+      total: allFiles.length,
+      applied,
+      skipped,
+      errors,
+      items: summary,
+    };
+    (globalThis as any).__lastDeployResult = result;
+    return result;
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}

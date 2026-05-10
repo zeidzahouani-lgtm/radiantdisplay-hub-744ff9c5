@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Database, Download, Container, FileArchive, Loader2, Package, FileCode, Copy,
   Upload, CheckCircle2, XCircle, AlertCircle, ServerCog, Rocket, ShieldCheck,
-  Server, Terminal, Wifi, KeyRound, Trash2, Stethoscope, RefreshCw, HardDrive, Radio,
+  Server, Terminal, Wifi, KeyRound, Trash2, Stethoscope, RefreshCw, HardDrive, Radio, GitBranch,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Textarea } from "@/components/ui/textarea";
@@ -1066,6 +1066,8 @@ To rebuild manually: docker compose up -d --build
   // ===== Generic SSH action runner with polling =====
   type DiagCheck = { key: string; label: string; ok: boolean; detail?: string; suggested_action?: string };
   const [serverDiag, setServerDiag] = useState<{ checks: DiagCheck[]; suggestions: string[] } | null>(null);
+  type MigItem = { name: string; status: "applied" | "skipped" | "error"; error?: string };
+  const [migrationResult, setMigrationResult] = useState<{ total: number; applied: number; skipped: number; errors: number; items: MigItem[] } | null>(null);
 
   const runSshAction = async (
     action: string,
@@ -1160,6 +1162,25 @@ To rebuild manually: docker compose up -d --build
       successMessage: "URL API corrigée ✓",
       onResult: (r) => { if (r?.url) handleDeploySuccess(r.url, r.supabase_local || null); },
     });
+
+  const handleApplyMigrations = () => {
+    setMigrationResult(null);
+    runSshAction("apply_local_migrations", {}, {
+      initialLog: "🗃 Application des migrations manquantes…",
+      successMessage: "Migrations appliquées ✓",
+      onResult: (r) => {
+        if (r && Array.isArray(r.items)) {
+          setMigrationResult({
+            total: r.total ?? r.items.length,
+            applied: r.applied ?? 0,
+            skipped: r.skipped ?? 0,
+            errors: r.errors ?? 0,
+            items: r.items,
+          });
+        }
+      },
+    });
+  };
 
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
@@ -1982,6 +2003,16 @@ To rebuild manually: docker compose up -d --build
                 </Button>
                 <Button
                   type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleApplyMigrations}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Applique automatiquement toutes les migrations SQL manquantes sur le serveur local"
+                >
+                  <GitBranch className="h-4 w-4" />Appliquer les migrations
+                </Button>
+                <Button
+                  type="button"
                   className="gap-2"
                   onClick={handleDiagnoseServer}
                   disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
@@ -2054,6 +2085,56 @@ To rebuild manually: docker compose up -d --build
                             </Button>
                           ))}
                         </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
+              {migrationResult && (
+                <div className="space-y-3 rounded-xl border bg-card/50 p-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <GitBranch className="h-4 w-4" />Résultat des migrations
+                    </h3>
+                    <div className="flex gap-2 text-xs flex-wrap">
+                      <Badge variant="secondary">Total : {migrationResult.total}</Badge>
+                      <Badge className="bg-primary/15 text-primary hover:bg-primary/20">Appliquées : {migrationResult.applied}</Badge>
+                      <Badge variant="outline">Déjà à jour : {migrationResult.skipped}</Badge>
+                      {migrationResult.errors > 0 && (
+                        <Badge variant="destructive">Erreurs : {migrationResult.errors}</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {migrationResult.items.map((m) => (
+                      <div key={m.name} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-background border">
+                        {m.status === "applied" && <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
+                        {m.status === "skipped" && <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
+                        {m.status === "error" && <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-mono truncate">{m.name}</div>
+                          <div className="text-muted-foreground">
+                            {m.status === "applied" && "Appliquée avec succès"}
+                            {m.status === "skipped" && "Déjà appliquée"}
+                            {m.status === "error" && (m.error?.slice(0, 240) || "Erreur inconnue")}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {migrationResult.errors === 0 ? (
+                    <Alert className="border-primary/40 bg-primary/5">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Le serveur local est synchronisé avec les migrations du dépôt.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Certaines migrations ont échoué — consultez les détails ci-dessus puis le journal pour le contexte SQL.
                       </AlertDescription>
                     </Alert>
                   )}
