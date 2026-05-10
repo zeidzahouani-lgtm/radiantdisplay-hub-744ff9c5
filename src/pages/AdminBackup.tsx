@@ -1039,7 +1039,7 @@ To rebuild manually: docker compose up -d --build
         try { parsed = JSON.parse(row.value as string); } catch { continue; }
         if (Array.isArray(parsed.logs)) setSshLogs(parsed.logs);
         if (parsed.status === "success") {
-          handleDeploySuccess(parsed.result?.url || `http://${sshHost.trim()}:${sshAppPort}`, parsed.result?.supabase_local || null);
+          handleDeploySuccess(parsed.result?.url || `http://${(sshLocalIp.trim() || "127.0.0.1")}:${sshAppPort}`, parsed.result?.supabase_local || null);
           toast.success("Certificat/API + upload/écrans réparés ✓");
           return;
         }
