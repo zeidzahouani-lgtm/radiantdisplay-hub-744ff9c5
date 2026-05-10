@@ -1113,7 +1113,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
   const branch = body.git_branch || "main";
-  const enableHttps = !!body.enable_https;
+  const requestedEnableHttps = !!body.enable_https;
   const httpsPort = body.https_port || "8443";
   const httpsDomain = (body.https_domain || body.host).trim();
   const dbStack = body.db_stack === "postgres_only" ? "postgres_only" : "supabase_full";
@@ -1122,6 +1122,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   // For postgres_only, we deploy our OWN simple postgres container (no full Supabase stack).
   const installSupabase = !!body.install_supabase_local && dbStack === "supabase_full";
   const installPostgresOnly = !!body.install_supabase_local && dbStack === "postgres_only";
+  // Local Supabase is intentionally exposed through the HTTP app proxy. A self-signed HTTPS
+  // frontend makes browser uploads fail with ERR_CERT_AUTHORITY_INVALID, so deployment now
+  // applies the same safe HTTP routing that the manual "repair upload/screens" action used.
+  const enableHttps = requestedEnableHttps && !installSupabase;
   const forceFreshInstall = !!body.force_fresh_install;
   const supaKongPort = body.supabase_kong_http_port || "8000";
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
@@ -1154,6 +1158,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   await log(`→ Connecting to ${body.username}@${body.host}:${port}…`);
   const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
   await log("✓ SSH connection established");
+  if (requestedEnableHttps && installSupabase) {
+    await log("ℹ HTTPS auto-signé désactivé pour ce déploiement local : l'app et son API passent en HTTP via le proxy local pour éviter les erreurs de certificat sur les uploads/écrans.");
+  }
 
     try {
       const sudoPrefix = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S `;
