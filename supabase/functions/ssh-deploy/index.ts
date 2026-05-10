@@ -1286,10 +1286,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         const anonKey = jwtLines[0];
         const serviceKey = jwtLines[1];
 
-        const appPublicUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
+        const appPublicUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
         const supaKongPublicUrl = `http://127.0.0.1:${supaKongPort}`;
-        // Force the deployed app + edge functions to talk to Supabase via the local IP (127.0.0.1 by default)
-        const supaBrowserUrl = `http://${localIp}:${appPort}`;
+        // The browser must use the app proxy on the server address; 127.0.0.1 is only valid inside SSH checks.
+        const supaBrowserUrl = appPublicUrl;
 
         const envPatch = [
           `POSTGRES_PASSWORD=${postgresPw}`,
@@ -1419,7 +1419,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await syncLocalAuthSafeEnv(conn, supaDir, log);
         await startLocalSupabaseEssentials(conn, supaDir, log, true);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
-        const supaBrowserUrl = `http://${localIp}:${appPort}`;
+        const supaBrowserUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
         supabaseUrlOverride = supaBrowserUrl;
         supabaseAnonOverride = anonKey;
         supabaseProjectIdOverride = "local";
@@ -1676,7 +1676,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
     await log("→ Test de connectivité de la stack déployée…");
 
     // App health
-    const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${localIp}:${appPort}`;
+    const appUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
     const localAppUrl = enableHttps ? `https://${localIp}:${httpsPort}` : `http://${localIp}:${appPort}`;
     const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
