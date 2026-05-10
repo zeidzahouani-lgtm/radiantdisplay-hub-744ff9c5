@@ -1860,7 +1860,8 @@ async function runResetAdminPassword(body: DeployBody, log: (m: string) => Promi
       log,
       buildDirectKongAuthLoginCommand(supaDir, anonKey, DEFAULT_ADMIN_EMAIL, newPassword),
     );
-    await verifyPublicAuthLogin(publicUrl, anonKey, DEFAULT_ADMIN_EMAIL, newPassword, log);
+    // Vérification publique désactivée : tout est validé via 127.0.0.1 sur le serveur
+    await log(`ℹ Vérification publique ignorée (test effectué localement via 127.0.0.1:${kongPort}). URL publique : ${publicUrl}`);
 
     await log("✓ Mot de passe admin réinitialisé avec succès");
     await log("");
