@@ -38,6 +38,13 @@ interface ServerData {
 interface DbData {
   tables: Record<string, number>;
   recent_screens: { id: string; name: string; status: string; player_heartbeat_at: string | null }[];
+  local?: {
+    container: string;
+    size_bytes: number;
+    saturation_pct: number;
+    disk_total_bytes: number;
+    databases: { name: string; size: number }[];
+  };
 }
 
 export default function AdminServerStatus() {
