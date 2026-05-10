@@ -1748,11 +1748,12 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
 async function repairLocalApiUrlOnExistingDeployment(conn: Client, body: DeployBody, kongPort: string, anonKey: string, log: (m: string) => Promise<void> | void) {
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
-  const publicBase = `http://${body.host}:${appPort}`;
+  const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
+  const publicBase = `http://${localIp}:${appPort}`;
   const repoDir = `${remoteDir}/repo`;
   const supaDir = `${remoteDir}/supabase`;
 
-  await log(`→ Réparation URL API navigateur : ${publicBase} (évite le certificat HTTPS auto-signé)`);
+  await log(`→ Réparation URL API navigateur : ${publicBase} (vérification locale via ${localIp})`);
 
   const nginxConf = `client_max_body_size 1024m;
 server {
