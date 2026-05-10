@@ -1261,7 +1261,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         const serviceKey = jwtLines[1];
 
         const appPublicUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
-        const supaKongPublicUrl = `http://${body.host}:${supaKongPort}`;
+        const supaKongPublicUrl = `http://127.0.0.1:${supaKongPort}`;
         const supaBrowserUrl = appPublicUrl;
 
         const envPatch = [
@@ -1299,9 +1299,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         log(`✓ Supabase local démarré`);
         log(`  • API app: ${supaBrowserUrl} (proxy sécurisé via l'application)`);
-        log(`  • API directe: ${supaKongPublicUrl}`);
+        log(`  • API locale serveur: ${supaKongPublicUrl}`);
         log(`  • Studio: http://${body.host}:${supaStudioPort}  (admin / ${dashboardPw})`);
-        log(`  • DB:     postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
+        log(`  • DB locale serveur: postgres://postgres:${postgresPw}@127.0.0.1:${supaDbPort}/postgres`);
         log(`  ⚠ Notez le mot de passe du dashboard, il ne sera pas réaffiché.`);
 
         // ===== Apply app migrations from cloned repo =====
@@ -1365,7 +1365,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         await log(`✓ Postgres standalone démarré`);
         await log(`  • Image:      ${postgresImage}`);
-        await log(`  • Connexion:  postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
+        await log(`  • Connexion locale serveur: postgres://postgres:${postgresPw}@127.0.0.1:${supaDbPort}/postgres`);
         await log(`  • Mot de passe: ${postgresPw}  (notez-le, il ne sera pas réaffiché)`);
         (globalThis as any).__pgOnlyResult = { image: postgresImage, port: supaDbPort, password: postgresPw, host: body.host };
       }
