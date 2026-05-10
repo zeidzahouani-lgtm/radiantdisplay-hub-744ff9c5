@@ -1114,6 +1114,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const port = body.port ?? 22;
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
+  const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
   const branch = body.git_branch || "main";
   const requestedEnableHttps = !!body.enable_https;
   const httpsPort = body.https_port || "8443";
@@ -1502,7 +1503,7 @@ EXPOSE 80
 CMD ["nginx","-g","daemon off;"]
 `;
       const localFunctions = [
-        "bootstrap-admin", "restore-backup", "ai-assistant", "check-email-replies", "check-inbox",
+        "admin-diagnostics", "bootstrap-admin", "restore-backup", "ai-assistant", "check-email-replies", "check-inbox",
         "content-action", "content-webhook", "generate-devis", "invite-user", "resend-ack",
         "screen-setup-guide", "send-credentials", "server-stats", "sync-client-dravox", "test-email",
       ];
@@ -1652,7 +1653,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
 
     // App health
     const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
-    const localAppUrl = enableHttps ? `https://127.0.0.1:${httpsPort}` : `http://127.0.0.1:${appPort}`;
+    const localAppUrl = enableHttps ? `https://${localIp}:${httpsPort}` : `http://${localIp}:${appPort}`;
     const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
     connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${localAppUrl} (local serveur)` };
