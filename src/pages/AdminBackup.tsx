@@ -1794,6 +1794,16 @@ To rebuild manually: docker compose up -d --build
                 >
                   <AlertCircle className="h-4 w-4" />Créer/réparer admin
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairLocalWrites}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Corrige les permissions locales Storage/RLS sans réinstaller le serveur"
+                >
+                  <ShieldCheck className="h-4 w-4" />Réparer upload/écrans
+                </Button>
                 {sshDeployedUrl && (
                   <a href={sshDeployedUrl} target="_blank" rel="noopener noreferrer">
                     <Button variant="outline" className="gap-2">
