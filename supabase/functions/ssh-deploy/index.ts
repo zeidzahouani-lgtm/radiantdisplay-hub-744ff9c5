@@ -130,6 +130,11 @@ const DEFAULT_ADMIN_PASSWORD = "260390DS";
 
 const shQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
+function resolveBrowserAppBase(body: DeployBody, appPort: string, enableHttps = false, httpsDomain?: string, httpsPort?: string) {
+  const host = (enableHttps ? (httpsDomain || body.host) : body.host).trim();
+  return enableHttps ? `https://${host}:${httpsPort || "8443"}` : `http://${host}:${appPort}`;
+}
+
 function dockerPsql(connDir: string, sqlB64: string, onErrorStop = true) {
   const psql = `PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=${onErrorStop ? 1 : 0}`;
   return `cd ${connDir} && printf '%s' '${sqlB64}' | base64 -d | docker compose exec -T --user postgres db sh -lc ${shQuote(psql)} 2>&1`;
