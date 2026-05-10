@@ -9,6 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import FallbackScreen from "@/components/player/FallbackScreen";
 import DiagnosticOverlay from "@/components/player/DiagnosticOverlay";
 import { useLocalHealth } from "@/hooks/useLocalHealth";
+import { toEmbedUrl } from "@/lib/iframe-url";
 
 // Hook to fetch active contents for a screen filtered by current time
 function useActiveContents(screenId: string | undefined) {
