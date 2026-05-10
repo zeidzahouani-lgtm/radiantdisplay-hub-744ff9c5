@@ -1842,6 +1842,7 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
     }
     await ensurePostgresSqlAccess(conn, supaDir, log);
     await applyLocalDashboardWriteHotfix(conn, supaDir, log);
+    await syncLocalEdgeFunctions(conn, remoteDir, supaDir, log);
 
     const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || body.supabase_kong_http_port || "8000";
     const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY") || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
