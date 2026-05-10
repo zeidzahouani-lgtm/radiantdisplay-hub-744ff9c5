@@ -277,7 +277,7 @@ function MediaRenderer({ media, playlistLength }: { media: { id: string; name: s
   }
   return (
     <div style={containerStyle}>
-      <iframe src={media.url} style={{ ...mediaStyle, border: "none" }} allowFullScreen title={media.name} />
+      <iframe src={toEmbedUrl(media.url)} style={{ ...mediaStyle, border: "none" }} allowFullScreen title={media.name} />
     </div>
   );
 }
