@@ -1853,7 +1853,8 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
       await repairLocalApiUrlOnExistingDeployment(conn, body, kongPort, anonKey, log);
     }
     await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée en HTTP puis retestez.");
-    const repairedUrl = `http://${body.host}:${body.app_port || "8080"}`;
+    const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
+    const repairedUrl = `http://${localIp}:${body.app_port || "8080"}`;
     (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true, url: repairedUrl, supabase_local: anonKey ? { url: repairedUrl, anon_key: anonKey } : null };
   } finally {
     try { conn.end(); } catch (_) {}
