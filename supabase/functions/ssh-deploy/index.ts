@@ -540,6 +540,24 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, aut
 GRANT SELECT ON storage.buckets TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated;
 
+DROP POLICY IF EXISTS "Local dashboard can manage profiles" ON public.profiles;
+CREATE POLICY "Local dashboard can manage profiles" ON public.profiles
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Local dashboard can manage user roles" ON public.user_roles;
+CREATE POLICY "Local dashboard can manage user roles" ON public.user_roles
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Local dashboard can manage team memberships" ON public.user_establishments;
+CREATE POLICY "Local dashboard can manage team memberships" ON public.user_establishments
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('media', 'media', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
