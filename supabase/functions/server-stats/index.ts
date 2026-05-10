@@ -60,10 +60,10 @@ Deno.serve(async (req) => {
     }
 
     const body = (await req.json()) as StatsBody;
-    // L'hôte est fixé côté serveur (variable SERVER_STATS_HOST) et n'est jamais exposé au client.
-    const serverHost = Deno.env.get("SERVER_STATS_HOST") || "";
+    // Hôte: priorité au champ fourni par le client, sinon variable serveur SERVER_STATS_HOST.
+    const serverHost = (body.host && body.host.trim()) || Deno.env.get("SERVER_STATS_HOST") || "";
     if (!serverHost) {
-      return new Response(JSON.stringify({ error: "Hôte serveur non configuré (SERVER_STATS_HOST manquant)" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Hôte serveur manquant (renseignez l'adresse de l'hôte)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!body.username || !body.password) {
       return new Response(JSON.stringify({ error: "Identifiants SSH manquants" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

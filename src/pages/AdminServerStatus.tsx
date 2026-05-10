@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Activity, Cpu, MemoryStick, HardDrive, Server, Container, Database, RefreshCw, Loader2, Network, Wifi, Gauge } from "lucide-react";
+import { Activity, Cpu, MemoryStick, HardDrive, Server, Container, Database, RefreshCw, Loader2, Network, Wifi, Gauge, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -48,6 +49,7 @@ interface DbData {
 }
 
 export default function AdminServerStatus() {
+  const [host, setHost] = useState(() => localStorage.getItem("server_stats_host") || "");
   const [port, setPort] = useState(() => localStorage.getItem("server_stats_port") || "22");
   const [username, setUsername] = useState(() => localStorage.getItem("server_stats_user") || "root");
   const [password, setPassword] = useState("");
@@ -57,17 +59,18 @@ export default function AdminServerStatus() {
   const [lastFetch, setLastFetch] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    if (!username || !password) {
-      toast.error("Renseignez l'utilisateur et le mot de passe SSH");
+    if (!host || !username || !password) {
+      toast.error("Renseignez l'hôte, l'utilisateur et le mot de passe SSH");
       return;
     }
     setLoading(true);
     try {
+      localStorage.setItem("server_stats_host", host);
       localStorage.setItem("server_stats_port", port);
       localStorage.setItem("server_stats_user", username);
 
       const { data, error } = await supabase.functions.invoke("server-stats", {
-        body: { port: parseInt(port) || 22, username: username.trim(), password },
+        body: { host: host.trim(), port: parseInt(port) || 22, username: username.trim(), password },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erreur inconnue");
@@ -81,6 +84,39 @@ export default function AdminServerStatus() {
       setLoading(false);
     }
   };
+
+  // Compute alerts from results
+  const alerts: { level: "warning" | "critical"; title: string; message: string }[] = [];
+  if (server) {
+    if (server.cpu.usage_pct >= 90) alerts.push({ level: "critical", title: "CPU saturé", message: `Utilisation CPU à ${server.cpu.usage_pct.toFixed(1)}%` });
+    else if (server.cpu.usage_pct >= 75) alerts.push({ level: "warning", title: "CPU élevé", message: `Utilisation CPU à ${server.cpu.usage_pct.toFixed(1)}%` });
+
+    const _memPct = (server.memory.used / server.memory.total) * 100;
+    if (_memPct >= 90) alerts.push({ level: "critical", title: "Mémoire saturée", message: `RAM utilisée à ${_memPct.toFixed(0)}%` });
+    else if (_memPct >= 80) alerts.push({ level: "warning", title: "Mémoire élevée", message: `RAM utilisée à ${_memPct.toFixed(0)}%` });
+
+    const _diskPct = (server.disk.used / server.disk.total) * 100;
+    if (_diskPct >= 90) alerts.push({ level: "critical", title: "Disque presque plein", message: `Partition / utilisée à ${_diskPct.toFixed(0)}%` });
+    else if (_diskPct >= 80) alerts.push({ level: "warning", title: "Disque chargé", message: `Partition / utilisée à ${_diskPct.toFixed(0)}%` });
+
+    if (server.swap.total > 0) {
+      const _swapPct = (server.swap.used / server.swap.total) * 100;
+      if (_swapPct >= 50) alerts.push({ level: "warning", title: "Swap actif", message: `Swap utilisé à ${_swapPct.toFixed(0)}% — la RAM est probablement insuffisante` });
+    }
+
+    server.disks?.forEach((d) => {
+      const v = parseFloat(d.pct);
+      if (v >= 90) alerts.push({ level: "critical", title: `Disque ${d.mount} presque plein`, message: `${d.pct} utilisés sur ${d.device}` });
+      else if (v >= 80) alerts.push({ level: "warning", title: `Disque ${d.mount} chargé`, message: `${d.pct} utilisés sur ${d.device}` });
+    });
+
+    const stoppedDocker = server.docker?.containers?.filter((c) => !c.status.includes("Up")) || [];
+    stoppedDocker.forEach((c) => alerts.push({ level: "critical", title: `Conteneur arrêté: ${c.name}`, message: c.status }));
+  }
+  if (database?.local) {
+    if (database.local.saturation_pct >= 70) alerts.push({ level: "critical", title: "DB locale critique", message: `Saturation à ${database.local.saturation_pct.toFixed(1)}% du disque` });
+    else if (database.local.saturation_pct >= 40) alerts.push({ level: "warning", title: "DB locale volumineuse", message: `Saturation à ${database.local.saturation_pct.toFixed(1)}% du disque` });
+  }
 
   const memPct = server ? (server.memory.used / server.memory.total) * 100 : 0;
   const diskPct = server ? (server.disk.used / server.disk.total) * 100 : 0;
@@ -101,10 +137,14 @@ export default function AdminServerStatus() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2"><Server className="h-5 w-5" />Connexion SSH</CardTitle>
-          <CardDescription>L'hôte est configuré côté serveur. Renseignez uniquement vos identifiants SSH.</CardDescription>
+          <CardDescription>Renseignez l'adresse de l'hôte et vos identifiants SSH.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Hôte</Label>
+              <Input value={host} onChange={e => setHost(e.target.value)} placeholder="ex: home-z.ddns.me ou 192.168.1.10" disabled={loading} />
+            </div>
             <div className="space-y-1.5">
               <Label>Port</Label>
               <Input value={port} onChange={e => setPort(e.target.value)} placeholder="22" disabled={loading} />
@@ -113,7 +153,7 @@ export default function AdminServerStatus() {
               <Label>Utilisateur SSH</Label>
               <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="root" disabled={loading} />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 md:col-span-4">
               <Label>Mot de passe SSH</Label>
               <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" disabled={loading} />
             </div>
@@ -126,6 +166,33 @@ export default function AdminServerStatus() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Alerts */}
+      {(server || database) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className={`h-5 w-5 ${alerts.length ? "text-destructive" : "text-muted-foreground"}`} />
+              Alertes
+              {alerts.length > 0 && <Badge variant="destructive">{alerts.length}</Badge>}
+            </CardTitle>
+            <CardDescription>
+              {alerts.length === 0 ? "Aucune alerte — tout fonctionne normalement." : "Anomalies détectées sur le serveur ou la base."}
+            </CardDescription>
+          </CardHeader>
+          {alerts.length > 0 && (
+            <CardContent className="space-y-2">
+              {alerts.map((a, i) => (
+                <Alert key={i} variant={a.level === "critical" ? "destructive" : "default"}>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>{a.title}</AlertTitle>
+                  <AlertDescription>{a.message}</AlertDescription>
+                </Alert>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {server && (
         <>
