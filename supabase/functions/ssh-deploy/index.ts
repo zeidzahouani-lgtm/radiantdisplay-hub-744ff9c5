@@ -1047,6 +1047,14 @@ async function runDeploymentJob(
       await runRepairLocalWrites(body, log);
     } else if (body.action === "repair_local_api_url") {
       await runRepairLocalApiUrl(body, log);
+    } else if (body.action === "diagnose_server") {
+      await runDiagnoseServer(body, log, persist);
+    } else if (body.action === "restart_stack") {
+      await runRestartStack(body, log);
+    } else if (body.action === "repair_storage_buckets") {
+      await runRepairStorageBuckets(body, log);
+    } else if (body.action === "repair_realtime") {
+      await runRepairRealtime(body, log);
     } else {
       await runDeployment(body, log);
     }
