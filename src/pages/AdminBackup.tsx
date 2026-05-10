@@ -1182,7 +1182,33 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
-  const fixActionMap: Record<string, { label: string; run: () => void }> = {
+  const [quickUpdateResult, setQuickUpdateResult] = useState<{
+    git?: { ok: boolean; commit?: string; changed_files?: number; message?: string };
+    functions?: { ok: boolean };
+    web_rebuild?: { ok: boolean };
+  } | null>(null);
+  const handleQuickUpdate = () => {
+    setQuickUpdateResult(null);
+    setMigrationResult(null);
+    runSshAction("quick_update", { git_branch: sshGitBranch.trim() || "main" }, {
+      initialLog: "⚡ Mise à jour rapide (git pull + migrations + rebuild web)…",
+      successMessage: "Mise à jour appliquée ✓",
+      onResult: (r) => {
+        if (!r) return;
+        setQuickUpdateResult(r);
+        if (r.migrations?.items) {
+          setMigrationResult({
+            total: r.migrations.items.length,
+            applied: r.migrations.applied || 0,
+            skipped: r.migrations.skipped || 0,
+            errors: r.migrations.errors || 0,
+            items: r.migrations.items,
+          });
+        }
+      },
+    });
+  };
+
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
     repair_local_writes: { label: "Réparer upload/écrans", run: handleRepairLocalWrites },
     repair_local_api_url: { label: "Corriger l'URL API", run: handleRepairApiUrl },
