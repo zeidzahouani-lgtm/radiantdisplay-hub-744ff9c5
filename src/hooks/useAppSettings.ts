@@ -19,8 +19,8 @@ export interface AppSettings {
 const defaultSettings: AppSettings = {
   app_name: "ScreenFlow by Dravox",
   app_tagline: "Digital Signage CMS",
-  logo_url: "",
-  favicon_url: "",
+  logo_url: "/dravox-logo.jpg",
+  favicon_url: "/dravox-logo.jpg",
   primary_color: "185 100% 55%",
   accent_color: "270 80% 60%",
   welcome_message: "Connectez-vous à votre tableau de bord",
