@@ -1149,7 +1149,9 @@ Deno.serve(async (req) => {
                     ? "Réparation des buckets Storage lancée en arrière-plan."
                     : action === "repair_realtime"
                       ? "Réparation Realtime lancée en arrière-plan."
-                      : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                      : action === "apply_local_migrations"
+                        ? "Application des migrations locales lancée en arrière-plan."
+                        : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
