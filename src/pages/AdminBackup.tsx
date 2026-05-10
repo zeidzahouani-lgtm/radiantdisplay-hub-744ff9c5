@@ -260,6 +260,7 @@ export default function AdminBackup() {
       if (!raw) return;
       const c = JSON.parse(raw);
       if (c.sshHost) setSshHost(c.sshHost);
+      if (c.sshLocalIp) setSshLocalIp(c.sshLocalIp);
       if (c.sshPort) setSshPort(c.sshPort);
       if (c.sshUser) setSshUser(c.sshUser);
       if (c.sshRemoteDir) setSshRemoteDir(c.sshRemoteDir);
