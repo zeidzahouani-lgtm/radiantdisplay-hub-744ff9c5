@@ -1016,6 +1016,7 @@ To rebuild manually: docker compose up -d --build
           username: sshUser.trim(),
           password: sshPassword,
           remote_dir: sshRemoteDir.trim() || "/opt/screenflow",
+          app_port: sshAppPort,
           supabase_kong_http_port: sshSupaKongPort,
         },
       });
@@ -1032,7 +1033,11 @@ To rebuild manually: docker compose up -d --build
         let parsed: any;
         try { parsed = JSON.parse(row.value as string); } catch { continue; }
         if (Array.isArray(parsed.logs)) setSshLogs(parsed.logs);
-        if (parsed.status === "success") { toast.success("Upload et création d'écrans réparés ✓"); return; }
+        if (parsed.status === "success") {
+          handleDeploySuccess(parsed.result?.url || `http://${sshHost.trim()}:${sshAppPort}`, parsed.result?.supabase_local || null);
+          toast.success("Certificat/API + upload/écrans réparés ✓");
+          return;
+        }
         if (parsed.status === "error") { toast.error("Échec : " + (parsed.error || "inconnu")); return; }
       }
       toast.warning("Délai dépassé — consultez les logs.");
