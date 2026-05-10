@@ -1209,6 +1209,41 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
+  // ===== Network management =====
+  const [networkInfo, setNetworkInfo] = useState<any>(null);
+  const [netSubnet, setNetSubnet] = useState("172.28.0.0/16");
+  const [netGateway, setNetGateway] = useState("");
+  const [netName, setNetName] = useState("screenflow_default");
+
+  const handleNetworkInspect = () => {
+    setNetworkInfo(null);
+    runSshAction("network_inspect", {}, {
+      initialLog: "🔎 Inspection du réseau Docker…",
+      successMessage: "Inspection terminée ✓",
+      onResult: (r) => setNetworkInfo(r),
+    });
+  };
+  const handleNetworkRecreate = () => {
+    runSshAction("network_recreate", {}, {
+      initialLog: "♻ Recréation du réseau Docker…",
+      successMessage: "Réseau recréé ✓",
+    });
+  };
+  const handleNetworkSetSubnet = () => {
+    if (!/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(netSubnet.trim())) {
+      toast.error("Sous-réseau invalide (utilisez la notation CIDR, ex: 172.28.0.0/16)");
+      return;
+    }
+    runSshAction("network_set_subnet", {
+      network_subnet: netSubnet.trim(),
+      network_gateway: netGateway.trim() || undefined,
+      network_name: netName.trim() || "screenflow_default",
+    }, {
+      initialLog: `🌐 Application du sous-réseau ${netSubnet} sur ${netName}…`,
+      successMessage: "Sous-réseau appliqué ✓",
+    });
+  };
+
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
     quick_update: { label: "Mise à jour rapide", run: handleQuickUpdate },
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
@@ -1235,6 +1270,7 @@ To rebuild manually: docker compose up -d --build
           <TabsTrigger value="restore" className="gap-2"><Upload className="h-4 w-4" />Restauration</TabsTrigger>
           <TabsTrigger value="env" className="gap-2"><ShieldCheck className="h-4 w-4" />Vérif. Env</TabsTrigger>
           <TabsTrigger value="docker" className="gap-2"><Container className="h-4 w-4" />Docker</TabsTrigger>
+          <TabsTrigger value="network" className="gap-2"><Wifi className="h-4 w-4" />Réseau Docker</TabsTrigger>
           <TabsTrigger value="ssh" className="gap-2"><Server className="h-4 w-4" />Déploiement SSH</TabsTrigger>
         </TabsList>
 
@@ -1653,6 +1689,151 @@ To rebuild manually: docker compose up -d --build
                   <pre className="text-xs bg-muted/50 p-3 rounded-lg overflow-x-auto max-h-60 border">{f.content}</pre>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ============ NETWORK TAB ============ */}
+        <TabsContent value="network" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Wifi className="h-5 w-5" />Réseau Docker local</CardTitle>
+              <CardDescription>
+                Inspectez et gérez la carte réseau Docker (subnet, gateway, IPs des conteneurs, ports exposés). Les actions s'exécutent sur le serveur configuré dans l'onglet Déploiement SSH.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Connexion SSH requise</AlertTitle>
+                <AlertDescription>
+                  Renseignez d'abord IP / utilisateur / mot de passe SSH dans l'onglet <strong>Déploiement SSH</strong>. Les actions ci-dessous réutilisent ces informations.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleNetworkInspect} disabled={sshDeploying} className="gap-2">
+                  {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stethoscope className="h-4 w-4" />}
+                  Inspecter le réseau
+                </Button>
+                <Button onClick={handleNetworkRecreate} disabled={sshDeploying} variant="outline" className="gap-2">
+                  <RefreshCw className="h-4 w-4" />Recréer le réseau
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><Radio className="h-4 w-4" />Sous-réseau personnalisé</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Définit un sous-réseau Docker fixe (utile en cas de conflit avec le LAN). Génère un fichier <code>docker-compose.network.yml</code> et redémarre la stack.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="net-name">Nom du réseau</Label>
+                    <Input id="net-name" value={netName} onChange={(e) => setNetName(e.target.value)} placeholder="screenflow_default" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="net-subnet">Sous-réseau (CIDR)</Label>
+                    <Input id="net-subnet" value={netSubnet} onChange={(e) => setNetSubnet(e.target.value)} placeholder="172.28.0.0/16" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="net-gw">Passerelle (optionnel)</Label>
+                    <Input id="net-gw" value={netGateway} onChange={(e) => setNetGateway(e.target.value)} placeholder="172.28.0.1" />
+                  </div>
+                </div>
+                <Button onClick={handleNetworkSetSubnet} disabled={sshDeploying} className="gap-2">
+                  {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Appliquer le sous-réseau
+                </Button>
+              </div>
+
+              {networkInfo && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold">Résultat de l'inspection</h3>
+
+                    {Array.isArray(networkInfo.details) && networkInfo.details.length > 0 && (
+                      <div className="space-y-3">
+                        {networkInfo.details.map((d: any) => (
+                          <div key={d.name} className="rounded-lg border p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <code className="text-sm font-semibold">{d.name}</code>
+                              <Badge variant="outline">{d.driver}</Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div><span className="text-muted-foreground">Subnet:</span> <code>{d.subnet || "—"}</code></div>
+                              <div><span className="text-muted-foreground">Gateway:</span> <code>{d.gateway || "—"}</code></div>
+                            </div>
+                            {d.containers?.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Conteneurs ({d.containers.length}):</p>
+                                <div className="space-y-1">
+                                  {d.containers.map((c: any) => (
+                                    <div key={c.name} className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1">
+                                      <code>{c.name}</code>
+                                      <code className="text-muted-foreground">{c.ipv4}</code>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {Array.isArray(networkInfo.tests) && networkInfo.tests.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase text-muted-foreground">Tests de connectivité interne</h4>
+                        {networkInfo.tests.map((t: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 text-xs bg-muted/40 rounded px-2 py-1.5">
+                            {t.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                            <span><code>{t.from}</code> → <code>{t.to}</code></span>
+                            {t.output && <span className="text-muted-foreground truncate ml-auto">{t.output}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {Array.isArray(networkInfo.port_mappings) && networkInfo.port_mappings.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase text-muted-foreground">Ports exposés</h4>
+                        <div className="rounded-lg border divide-y text-xs">
+                          {networkInfo.port_mappings.map((p: any) => (
+                            <div key={p.container} className="flex items-center justify-between px-2 py-1.5">
+                              <code>{p.container}</code>
+                              <code className="text-muted-foreground text-right">{p.ports || "—"}</code>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(networkInfo.interfaces) && networkInfo.interfaces.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase text-muted-foreground">Interfaces hôte</h4>
+                        <pre className="text-xs bg-muted/40 rounded p-2 overflow-x-auto">{networkInfo.interfaces.join("\n")}</pre>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {sshLogs.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
+                      <Terminal className="h-3.5 w-3.5" />Logs
+                    </h4>
+                    <pre className="text-xs bg-muted/40 rounded p-2 max-h-60 overflow-auto">{sshLogs.join("\n")}</pre>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

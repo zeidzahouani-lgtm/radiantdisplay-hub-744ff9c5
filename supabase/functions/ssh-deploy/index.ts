@@ -14,7 +14,11 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet";
+  // Custom Docker network subnet (CIDR), e.g. 172.28.0.0/16
+  network_subnet?: string;
+  network_gateway?: string;
+  network_name?: string;
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -1065,6 +1069,12 @@ async function runDeploymentJob(
       directResult = await runApplyLocalMigrations(body, log);
     } else if (body.action === "quick_update") {
       directResult = await runQuickUpdate(body, log);
+    } else if (body.action === "network_inspect") {
+      directResult = await runNetworkInspect(body, log);
+    } else if (body.action === "network_recreate") {
+      directResult = await runNetworkRecreate(body, log);
+    } else if (body.action === "network_set_subnet") {
+      directResult = await runNetworkSetSubnet(body, log);
     } else {
       await runDeployment(body, log);
     }
@@ -1155,7 +1165,13 @@ Deno.serve(async (req) => {
                         ? "Application des migrations locales lancée en arrière-plan."
                         : action === "quick_update"
                           ? "Mise à jour rapide lancée en arrière-plan (git pull + migrations + rebuild web)."
-                          : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                          : action === "network_inspect"
+                            ? "Inspection du réseau Docker lancée en arrière-plan."
+                            : action === "network_recreate"
+                              ? "Recréation du réseau Docker lancée en arrière-plan."
+                              : action === "network_set_subnet"
+                                ? "Application du sous-réseau personnalisé lancée en arrière-plan."
+                                : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2602,6 +2618,161 @@ async function runQuickUpdate(body: DeployBody, log: (m: string) => Promise<void
     const result = { action: "quick_update", ok, ...summary };
     (globalThis as any).__lastDeployResult = result;
     return result;
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+// ===== Docker network management =====
+async function runNetworkInspect(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    await log("→ Liste des réseaux Docker…");
+    const ls = await exec(conn, "docker network ls --format '{{.ID}}\t{{.Name}}\t{{.Driver}}\t{{.Scope}}' 2>&1");
+    const networks = ls.stdout.trim().split("\n").filter(Boolean).map((line) => {
+      const [id, name, driver, scope] = line.split("\t");
+      return { id, name, driver, scope };
+    });
+    await log(`  ${networks.length} réseau(x) détecté(s)`);
+
+    // Identify project networks (web stack + supabase stack)
+    const projectNetworks = networks.filter((n) =>
+      /screenflow|supabase|opt_/i.test(n.name) && n.driver === "bridge"
+    );
+
+    const details: any[] = [];
+    for (const net of projectNetworks) {
+      const insp = await exec(conn, `docker network inspect ${net.name} --format '{{json .}}' 2>&1`);
+      try {
+        const parsed = JSON.parse(insp.stdout.trim());
+        const ipam = parsed.IPAM?.Config?.[0] || {};
+        const containers = Object.values(parsed.Containers || {}).map((c: any) => ({
+          name: c.Name,
+          ipv4: c.IPv4Address,
+          mac: c.MacAddress,
+        }));
+        details.push({
+          name: net.name,
+          driver: net.driver,
+          subnet: ipam.Subnet || null,
+          gateway: ipam.Gateway || null,
+          containers,
+        });
+        await log(`  • ${net.name} → subnet=${ipam.Subnet || "?"} gateway=${ipam.Gateway || "?"} (${containers.length} conteneur(s))`);
+      } catch { /* ignore */ }
+    }
+
+    await log("→ Interfaces réseau de l'hôte…");
+    const hostIfaces = await exec(conn, "ip -o -4 addr show 2>&1 | awk '{print $2, $4}' || ifconfig -a 2>&1");
+    const interfaces = hostIfaces.stdout.trim().split("\n").filter(Boolean);
+
+    await log("→ Mappings de ports actifs…");
+    const ports = await exec(conn, "docker ps --format '{{.Names}}\t{{.Ports}}' 2>&1");
+    const portMap = ports.stdout.trim().split("\n").filter(Boolean).map((line) => {
+      const [name, p] = line.split("\t");
+      return { container: name, ports: p };
+    });
+
+    await log("→ Tests de connectivité interne (web → kong/db)…");
+    const webName = (await exec(conn, `cd ${remoteDir} && (docker compose ps -q web || docker-compose ps -q web) 2>/dev/null | head -1`)).stdout.trim();
+    const tests: any[] = [];
+    if (webName) {
+      const t1 = await exec(conn, `docker exec ${webName} sh -lc 'wget -q -T 3 -O - http://kong:8000/ 2>&1 | head -c 80' 2>&1`);
+      tests.push({ from: "web", to: "kong:8000", ok: (t1.code === 0), output: t1.stdout.trim() || t1.stderr.trim() });
+      const t2 = await exec(conn, `docker exec ${webName} sh -lc 'getent hosts db || nslookup db' 2>&1`);
+      tests.push({ from: "web", to: "db (DNS)", ok: t2.code === 0, output: t2.stdout.trim().split("\n")[0] || "" });
+    }
+
+    await log("✓ Inspection terminée");
+    return { action: "network_inspect", ok: true, networks, details, interfaces, port_mappings: portMap, tests };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+async function runNetworkRecreate(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const supaPresent = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (supaPresent) {
+      await log("→ Arrêt de la stack Supabase…");
+      await exec(conn, `cd ${supaDir} && (docker compose down || docker-compose down) 2>&1`);
+    }
+    const repoPresent = (await exec(conn, `[ -f ${remoteDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (repoPresent) {
+      await log("→ Arrêt de la stack web…");
+      await exec(conn, `cd ${remoteDir} && (docker compose down || docker-compose down) 2>&1`);
+    }
+    await log("→ Suppression des réseaux orphelins…");
+    await exec(conn, "docker network prune -f 2>&1");
+    if (supaPresent) {
+      await log("→ Redémarrage Supabase…");
+      const r1 = await exec(conn, `cd ${supaDir} && (docker compose up -d || docker-compose up -d) 2>&1`);
+      await log(r1.stdout.split("\n").slice(-10).join("\n"));
+    }
+    if (repoPresent) {
+      await log("→ Redémarrage web…");
+      const r2 = await exec(conn, `cd ${remoteDir} && (docker compose up -d || docker-compose up -d) 2>&1`);
+      await log(r2.stdout.split("\n").slice(-10).join("\n"));
+    }
+    await log("✓ Réseau Docker recréé");
+    return { action: "network_recreate", ok: true };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+async function runNetworkSetSubnet(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  const subnet = (body.network_subnet || "").trim();
+  const gateway = (body.network_gateway || "").trim();
+  const netName = (body.network_name || "screenflow_default").trim();
+  if (!/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(subnet)) {
+    throw new Error(`Sous-réseau invalide: ${subnet}. Utilisez la notation CIDR (ex: 172.28.0.0/16).`);
+  }
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const targetDir = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo ${supaDir} || echo ${remoteDir}`)).stdout.trim();
+    await log(`→ Cible: ${targetDir}`);
+
+    const overrideYml =
+`networks:
+  default:
+    name: ${netName}
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${subnet}${gateway ? `\n          gateway: ${gateway}` : ""}
+`;
+    await log(`→ Écriture de ${targetDir}/docker-compose.network.yml…`);
+    await uploadFile(conn, `${targetDir}/docker-compose.network.yml`, Buffer.from(overrideYml));
+
+    await log("→ Arrêt de la stack…");
+    await exec(conn, `cd ${targetDir} && (docker compose -f docker-compose.yml -f docker-compose.network.yml down || docker-compose -f docker-compose.yml -f docker-compose.network.yml down) 2>&1`);
+    await log(`→ Suppression du réseau '${netName}' s'il existe…`);
+    await exec(conn, `docker network rm ${netName} 2>/dev/null || true`);
+    await log("→ Redémarrage avec le nouveau sous-réseau…");
+    const r = await exec(conn, `cd ${targetDir} && (docker compose -f docker-compose.yml -f docker-compose.network.yml up -d || docker-compose -f docker-compose.yml -f docker-compose.network.yml up -d) 2>&1`);
+    await log(r.stdout.split("\n").slice(-15).join("\n"));
+
+    const insp = await exec(conn, `docker network inspect ${netName} --format '{{(index .IPAM.Config 0).Subnet}} {{(index .IPAM.Config 0).Gateway}}' 2>&1`);
+    await log(`✓ Réseau '${netName}' actif → ${insp.stdout.trim()}`);
+    return { action: "network_set_subnet", ok: true, network: netName, subnet, gateway: gateway || null, applied: insp.stdout.trim() };
   } finally {
     try { conn.end(); } catch (_) {}
   }
