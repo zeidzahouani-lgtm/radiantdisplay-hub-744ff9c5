@@ -137,10 +137,14 @@ export default function AdminServerStatus() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2"><Server className="h-5 w-5" />Connexion SSH</CardTitle>
-          <CardDescription>L'hôte est configuré côté serveur. Renseignez uniquement vos identifiants SSH.</CardDescription>
+          <CardDescription>Renseignez l'adresse de l'hôte et vos identifiants SSH.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Hôte</Label>
+              <Input value={host} onChange={e => setHost(e.target.value)} placeholder="ex: home-z.ddns.me ou 192.168.1.10" disabled={loading} />
+            </div>
             <div className="space-y-1.5">
               <Label>Port</Label>
               <Input value={port} onChange={e => setPort(e.target.value)} placeholder="22" disabled={loading} />
@@ -149,7 +153,7 @@ export default function AdminServerStatus() {
               <Label>Utilisateur SSH</Label>
               <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="root" disabled={loading} />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 md:col-span-4">
               <Label>Mot de passe SSH</Label>
               <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" disabled={loading} />
             </div>
@@ -162,6 +166,33 @@ export default function AdminServerStatus() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Alerts */}
+      {(server || database) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className={`h-5 w-5 ${alerts.length ? "text-destructive" : "text-muted-foreground"}`} />
+              Alertes
+              {alerts.length > 0 && <Badge variant="destructive">{alerts.length}</Badge>}
+            </CardTitle>
+            <CardDescription>
+              {alerts.length === 0 ? "Aucune alerte — tout fonctionne normalement." : "Anomalies détectées sur le serveur ou la base."}
+            </CardDescription>
+          </CardHeader>
+          {alerts.length > 0 && (
+            <CardContent className="space-y-2">
+              {alerts.map((a, i) => (
+                <Alert key={i} variant={a.level === "critical" ? "destructive" : "default"}>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>{a.title}</AlertTitle>
+                  <AlertDescription>{a.message}</AlertDescription>
+                </Alert>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {server && (
         <>
