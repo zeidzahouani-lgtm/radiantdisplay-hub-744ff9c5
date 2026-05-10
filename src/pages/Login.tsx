@@ -15,8 +15,8 @@ import { LoginRestoreButton } from "@/components/LoginRestoreButton";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("screenflow@screenflow.local");
+  const [password, setPassword] = useState("260390DS");
   const [loading, setLoading] = useState(false);
   const [videoBlocked, setVideoBlocked] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -155,6 +155,7 @@ export default function Login() {
                 placeholder="vous@exemple.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
                 required
                 className="login-input-focus bg-background/50 backdrop-blur-sm"
               />
@@ -168,6 +169,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
                 className="login-input-focus bg-background/50 backdrop-blur-sm"
               />

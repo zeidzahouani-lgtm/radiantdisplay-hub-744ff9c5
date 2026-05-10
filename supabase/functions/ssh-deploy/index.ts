@@ -40,6 +40,7 @@ interface DeployBody {
   supabase_kong_http_port?: string;   // public REST/Auth gateway (default 8000)
   supabase_studio_port?: string;      // Supabase Studio UI (default 3000)
   supabase_db_port?: string;          // Postgres (default 5432)
+  local_ip?: string;                  // Server-side local IP for internal checks (default 127.0.0.1)
   // Database stack choice
   // - "supabase_full" (default): full Supabase stack (Postgres + Auth + Storage + Realtime + Functions). Required for the app frontend to work.
   // - "postgres_only": deploy a standalone Postgres container only. App frontend will NOT work (no Auth/Storage/Realtime). Useful for external scripts.
@@ -539,6 +540,24 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, aut
 GRANT SELECT ON storage.buckets TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated;
 
+DROP POLICY IF EXISTS "Local dashboard can manage profiles" ON public.profiles;
+CREATE POLICY "Local dashboard can manage profiles" ON public.profiles
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Local dashboard can manage user roles" ON public.user_roles;
+CREATE POLICY "Local dashboard can manage user roles" ON public.user_roles
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Local dashboard can manage team memberships" ON public.user_establishments;
+CREATE POLICY "Local dashboard can manage team memberships" ON public.user_establishments
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('media', 'media', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
@@ -800,8 +819,9 @@ async function syncLocalEdgeFunctions(conn: Client, remoteDir: string, supaDir: 
     `cd ${supaDir} && ` +
     `anon=$(grep -E '^ANON_KEY=' .env | head -1 | cut -d= -f2-); ` +
     `svc=$(grep -E '^SERVICE_ROLE_KEY=' .env | head -1 | cut -d= -f2-); ` +
-    `for k in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY FUNCTIONS_VERIFY_JWT; do sed -i "/^$k=/d" .env; done; ` +
-    `printf 'SUPABASE_URL=http://kong:8000\nSUPABASE_ANON_KEY=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nFUNCTIONS_VERIFY_JWT=false\n' "$anon" "$svc" >> .env; ` +
+    `pgpw=$(grep -E '^POSTGRES_PASSWORD=' .env | head -1 | cut -d= -f2-); ` +
+    `for k in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_DB_URL DATABASE_URL FUNCTIONS_VERIFY_JWT; do sed -i "/^$k=/d" .env; done; ` +
+    `printf 'SUPABASE_URL=http://kong:8000\nSUPABASE_ANON_KEY=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nSUPABASE_DB_URL=postgresql://postgres:%s@db:5432/postgres\nDATABASE_URL=postgresql://postgres:%s@db:5432/postgres\nFUNCTIONS_VERIFY_JWT=false\n' "$anon" "$svc" "$pgpw" "$pgpw" >> .env; ` +
     `(docker compose up -d --no-deps functions 2>&1 || docker compose up -d --no-deps edge-runtime 2>&1 || true); ` +
     `(docker compose restart functions 2>&1 || docker compose restart edge-runtime 2>&1 || true)`;
   const result = await exec(conn, cmd);
@@ -1112,6 +1132,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const port = body.port ?? 22;
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
+  const localIp = /^\d{1,3}(\.\d{1,3}){3}$/.test((body.local_ip || "").trim()) ? body.local_ip!.trim() : "127.0.0.1";
   const branch = body.git_branch || "main";
   const requestedEnableHttps = !!body.enable_https;
   const httpsPort = body.https_port || "8443";
@@ -1500,7 +1521,7 @@ EXPOSE 80
 CMD ["nginx","-g","daemon off;"]
 `;
       const localFunctions = [
-        "bootstrap-admin", "restore-backup", "ai-assistant", "check-email-replies", "check-inbox",
+        "admin-diagnostics", "bootstrap-admin", "restore-backup", "ai-assistant", "check-email-replies", "check-inbox",
         "content-action", "content-webhook", "generate-devis", "invite-user", "resend-ack",
         "screen-setup-guide", "send-credentials", "server-stats", "sync-client-dravox", "test-email",
       ];
@@ -1650,7 +1671,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
 
     // App health
     const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
-    const localAppUrl = enableHttps ? `https://127.0.0.1:${httpsPort}` : `http://127.0.0.1:${appPort}`;
+    const localAppUrl = enableHttps ? `https://${localIp}:${httpsPort}` : `http://${localIp}:${appPort}`;
     const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
     connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${localAppUrl} (local serveur)` };
@@ -1821,6 +1842,7 @@ async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promis
     }
     await ensurePostgresSqlAccess(conn, supaDir, log);
     await applyLocalDashboardWriteHotfix(conn, supaDir, log);
+    await syncLocalEdgeFunctions(conn, remoteDir, supaDir, log);
 
     const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || body.supabase_kong_http_port || "8000";
     const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY") || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");

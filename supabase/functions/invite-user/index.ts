@@ -30,10 +30,10 @@ Deno.serve(async (req) => {
     if (!isServiceRole) {
       const token = authHeader.replace(/^Bearer\s+/i, "");
       const anonClient = createClient(supabaseUrl, anonKey);
-      const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
-      const userIdFromToken = claimsData?.claims?.sub;
-      if (claimsError || !userIdFromToken) {
-        console.error("Auth claims error:", claimsError?.message, "token len:", token.length);
+      const { data: userData, error: userError } = await anonClient.auth.getUser(token);
+      const userIdFromToken = userData?.user?.id;
+      if (userError || !userIdFromToken) {
+        console.error("Auth user error:", userError?.message, "token len:", token.length);
         throw new Error("Session expirée, veuillez vous reconnecter");
       }
 
@@ -257,9 +257,25 @@ Deno.serve(async (req) => {
 
     if (error) throw error;
 
+    if (data.user) {
+      const effectiveName = displayName || email.split("@")[0];
+      await adminClient.from("profiles").upsert({
+        id: data.user.id,
+        email,
+        display_name: effectiveName,
+      }, { onConflict: "id" });
+      await adminClient.from("user_roles").upsert({
+        user_id: data.user.id,
+        role: requestedRole === "marketing" ? "marketing" : "user",
+      }, { onConflict: "user_id,role" });
+      if (requestedRole === "marketing") {
+        await adminClient.from("user_roles").delete().eq("user_id", data.user.id).eq("role", "user");
+      }
+    }
+
     // If a specific role is requested (e.g. marketing), update the role
     if (requestedRole === "marketing" && data.user) {
-      await adminClient.from("user_roles").update({ role: requestedRole }).eq("user_id", data.user.id);
+      await adminClient.from("user_roles").upsert({ user_id: data.user.id, role: requestedRole }, { onConflict: "user_id,role" });
     }
 
     // If establishment_id provided, assign the new user to it
