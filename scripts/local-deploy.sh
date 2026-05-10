@@ -20,6 +20,6 @@ docker build \
   -t "$IMAGE_NAME" .
 
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p "$APP_PORT:80" "$IMAGE_NAME"
+docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p "127.0.0.1:$APP_PORT:80" "$IMAGE_NAME"
 
-echo "Déploiement local terminé: http://localhost:${APP_PORT}"
+echo "Déploiement local terminé: http://127.0.0.1:${APP_PORT}"

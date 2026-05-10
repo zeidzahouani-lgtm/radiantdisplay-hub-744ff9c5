@@ -1113,7 +1113,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   const remoteDir = body.remote_dir || "/opt/screenflow";
   const appPort = body.app_port || "8080";
   const branch = body.git_branch || "main";
-  const enableHttps = !!body.enable_https;
+  const requestedEnableHttps = !!body.enable_https;
   const httpsPort = body.https_port || "8443";
   const httpsDomain = (body.https_domain || body.host).trim();
   const dbStack = body.db_stack === "postgres_only" ? "postgres_only" : "supabase_full";
@@ -1122,6 +1122,10 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   // For postgres_only, we deploy our OWN simple postgres container (no full Supabase stack).
   const installSupabase = !!body.install_supabase_local && dbStack === "supabase_full";
   const installPostgresOnly = !!body.install_supabase_local && dbStack === "postgres_only";
+  // Local Supabase is intentionally exposed through the HTTP app proxy. A self-signed HTTPS
+  // frontend makes browser uploads fail with ERR_CERT_AUTHORITY_INVALID, so deployment now
+  // applies the same safe HTTP routing that the manual "repair upload/screens" action used.
+  const enableHttps = requestedEnableHttps && !installSupabase;
   const forceFreshInstall = !!body.force_fresh_install;
   const supaKongPort = body.supabase_kong_http_port || "8000";
   const supaKongHttpsPort = chooseKongHttpsPort(supaKongPort, [enableHttps ? httpsPort : ""]);
@@ -1154,6 +1158,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
   await log(`→ Connecting to ${body.username}@${body.host}:${port}…`);
   const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
   await log("✓ SSH connection established");
+  if (requestedEnableHttps && installSupabase) {
+    await log("ℹ HTTPS auto-signé désactivé pour ce déploiement local : l'app et son API passent en HTTP via le proxy local pour éviter les erreurs de certificat sur les uploads/écrans.");
+  }
 
     try {
       const sudoPrefix = `echo '${body.password.replace(/'/g, "'\\''")}' | sudo -S `;
@@ -1254,7 +1261,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         const serviceKey = jwtLines[1];
 
         const appPublicUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
-        const supaKongPublicUrl = `http://${body.host}:${supaKongPort}`;
+        const supaKongPublicUrl = `http://127.0.0.1:${supaKongPort}`;
         const supaBrowserUrl = appPublicUrl;
 
         const envPatch = [
@@ -1292,9 +1299,9 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         log(`✓ Supabase local démarré`);
         log(`  • API app: ${supaBrowserUrl} (proxy sécurisé via l'application)`);
-        log(`  • API directe: ${supaKongPublicUrl}`);
+        log(`  • API locale serveur: ${supaKongPublicUrl}`);
         log(`  • Studio: http://${body.host}:${supaStudioPort}  (admin / ${dashboardPw})`);
-        log(`  • DB:     postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
+        log(`  • DB locale serveur: postgres://postgres:${postgresPw}@127.0.0.1:${supaDbPort}/postgres`);
         log(`  ⚠ Notez le mot de passe du dashboard, il ne sera pas réaffiché.`);
 
         // ===== Apply app migrations from cloned repo =====
@@ -1358,7 +1365,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         await log(`✓ Postgres standalone démarré`);
         await log(`  • Image:      ${postgresImage}`);
-        await log(`  • Connexion:  postgres://postgres:${postgresPw}@${body.host}:${supaDbPort}/postgres`);
+        await log(`  • Connexion locale serveur: postgres://postgres:${postgresPw}@127.0.0.1:${supaDbPort}/postgres`);
         await log(`  • Mot de passe: ${postgresPw}  (notez-le, il ne sera pas réaffiché)`);
         (globalThis as any).__pgOnlyResult = { image: postgresImage, port: supaDbPort, password: postgresPw, host: body.host };
       }
@@ -1461,6 +1468,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         }
         log(applyMig.stdout.slice(-1500));
         log("✓ Migrations appliquées (les erreurs 'already exists' sont normales)");
+        await log("→ Application automatique de la réparation upload/écrans incluse au déploiement…");
         await applyLocalDashboardWriteHotfix(conn, pending.supaDir, log);
         await syncLocalEdgeFunctions(conn, remoteDir, pending.supaDir, log);
         if (supabaseAnonOverride) {
@@ -1642,9 +1650,10 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
 
     // App health
     const appUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
-    const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${appUrl} || echo FAIL`);
+    const localAppUrl = enableHttps ? `https://127.0.0.1:${httpsPort}` : `http://127.0.0.1:${appPort}`;
+    const appCheck = await exec(conn, `curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 ${localAppUrl} || echo FAIL`);
     const appCode = appCheck.stdout.trim();
-    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${appUrl}` };
+    connectivity.app = { ok: /^(200|301|302|304)$/.test(appCode), detail: `HTTP ${appCode} sur ${localAppUrl} (local serveur)` };
     await log(`  • App         : ${connectivity.app.ok ? "✓" : "✗"} ${connectivity.app.detail}`);
 
     if (installSupabase) {

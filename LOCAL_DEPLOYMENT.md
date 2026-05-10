@@ -26,7 +26,7 @@ Variables frontend Vite :
 | `VITE_SUPABASE_URL` | Oui | `http://IP_SERVEUR:8080` ou `http://IP_SERVEUR:8000` | URL publique Supabase accessible depuis le navigateur. Si elle pointe vers l'app (`8080`), nginx doit proxyfier `/rest/v1`, `/storage/v1`, `/functions/v1`, `/realtime/v1`, `/auth/v1`. |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Oui | clé `ANON_KEY` locale | Clé anon/publishable de l'instance locale. |
 | `VITE_SUPABASE_PROJECT_ID` | Non | `local` | Identifiant informatif pour le build. |
-| `DATABASE_URL` | Non côté frontend | `postgresql://postgres:...@localhost:5432/postgres` | Utilisé uniquement par scripts/CLI serveur. Jamais exposé au navigateur. |
+| `DATABASE_URL` | Non côté frontend | `postgresql://postgres:...@127.0.0.1:5432/postgres` | Utilisé uniquement par scripts/CLI serveur. Jamais exposé au navigateur. |
 
 Variables backend/Functions nécessaires côté stack Supabase locale :
 
@@ -54,6 +54,7 @@ Variables backend/Functions nécessaires côté stack Supabase locale :
    - appliquer `supabase/migrations/*.sql` dans l'ordre ;
    - synchroniser les Edge Functions ;
    - builder le frontend avec `VITE_SUPABASE_URL` et `VITE_SUPABASE_PUBLISHABLE_KEY` locaux ;
+   - appliquer automatiquement la réparation upload/écrans et valider les services côté serveur via `127.0.0.1` ;
    - configurer nginx avec proxy vers `/rest/v1`, `/storage/v1`, `/functions/v1`, `/realtime/v1`, `/auth/v1`.
 
 ### Option manuelle Docker
