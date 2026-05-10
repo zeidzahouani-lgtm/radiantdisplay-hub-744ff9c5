@@ -1679,6 +1679,28 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
       await log(`  • Postgres standalone : ${connectivity.postgres.ok ? "✓" : "✗"} ${connectivity.postgres.detail}`);
     }
 
+    // === Auto-create the default admin user so login + user/team management work right after deploy ===
+    if (installSupabase && supabaseAnonOverride) {
+      try {
+        await log("→ Création automatique du premier compte admin (screenflow@screenflow.local)…");
+        const supaDir = `${remoteDir}/supabase`;
+        const serviceKey =
+          (await readRemoteEnv(conn, `${supaDir}/.env`, "SERVICE_ROLE_KEY")) ||
+          (await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_SECRET_KEY"));
+        if (!serviceKey) {
+          await log("⚠ SERVICE_ROLE_KEY introuvable — admin par défaut non créé. Utilisez 'Réinitialiser le mot de passe admin' manuellement.");
+        } else {
+          await ensureLocalAuthGateway(conn, supaDir, supaKongPort, log);
+          await upsertDefaultAdminViaAuthApi(conn, supaDir, supaKongPort, serviceKey, DEFAULT_ADMIN_PASSWORD, log);
+          await ensureDefaultAdminRole(conn, supaDir, log);
+          await log("✓ Compte admin par défaut prêt — login : screenflow@screenflow.local / 260390DS");
+        }
+      } catch (adminErr: any) {
+        await log("⚠ Création automatique de l'admin échouée : " + (adminErr?.message || String(adminErr)));
+        await log("  → Vous pouvez relancer manuellement via 'Réinitialiser le mot de passe admin'.");
+      }
+    }
+
     conn.end();
     const url = appUrl;
     await log(`🚀 Deployment complete — accessible at ${url}`);
