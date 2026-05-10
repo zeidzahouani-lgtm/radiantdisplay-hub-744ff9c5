@@ -125,7 +125,7 @@ export function explainSupabaseError(error: unknown, context = "Supabase") {
     } catch {}
   }
 
-  if (lower.includes("err_cert_authority_invalid") || lower.includes("cert_authority_invalid") || lower.includes("certificate")) {
+  else if (lower.includes("err_cert_authority_invalid") || lower.includes("cert_authority_invalid") || lower.includes("certificate")) {
     cause = "Certificat HTTPS local non reconnu";
     action = "Le navigateur bloque l'API locale avant CORS/RLS. Relancez la réparation SSH : elle rebascule l'API navigateur en HTTP local et désactive la redirection HTTPS auto-signée.";
   } else if (httpStatus === 413 || lower.includes("trop volumineux") || lower.includes("payload too large")) {
