@@ -1069,6 +1069,12 @@ async function runDeploymentJob(
       directResult = await runApplyLocalMigrations(body, log);
     } else if (body.action === "quick_update") {
       directResult = await runQuickUpdate(body, log);
+    } else if (body.action === "network_inspect") {
+      directResult = await runNetworkInspect(body, log);
+    } else if (body.action === "network_recreate") {
+      directResult = await runNetworkRecreate(body, log);
+    } else if (body.action === "network_set_subnet") {
+      directResult = await runNetworkSetSubnet(body, log);
     } else {
       await runDeployment(body, log);
     }
