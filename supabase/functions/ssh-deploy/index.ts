@@ -1283,7 +1283,8 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
 
         const appPublicUrl = enableHttps ? `https://${httpsDomain}:${httpsPort}` : `http://${body.host}:${appPort}`;
         const supaKongPublicUrl = `http://127.0.0.1:${supaKongPort}`;
-        const supaBrowserUrl = appPublicUrl;
+        // Force the deployed app + edge functions to talk to Supabase via the local IP (127.0.0.1 by default)
+        const supaBrowserUrl = `http://${localIp}:${appPort}`;
 
         const envPatch = [
           `POSTGRES_PASSWORD=${postgresPw}`,
