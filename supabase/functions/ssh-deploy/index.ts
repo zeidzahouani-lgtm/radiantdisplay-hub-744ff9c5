@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime";
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -148,6 +148,10 @@ function dockerPsqlSelect(connDir: string, sql: string, silent = true) {
   const sqlB64 = btoa(sql);
   const psql = `PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d postgres -At -c "$(printf '%s' '${sqlB64}' | base64 -d)"`;
   return `cd ${connDir} && docker compose exec -T --user postgres db sh -lc ${shQuote(psql)}${silent ? " 2>/dev/null || true" : " 2>&1"}`;
+}
+
+function dockerPsqlExec(connDir: string, sql: string) {
+  return dockerPsql(connDir, btoa(sql), true);
 }
 
 interface RemotePreflightResult {
@@ -1047,6 +1051,14 @@ async function runDeploymentJob(
       await runRepairLocalWrites(body, log);
     } else if (body.action === "repair_local_api_url") {
       await runRepairLocalApiUrl(body, log);
+    } else if (body.action === "diagnose_server") {
+      await runDiagnoseServer(body, log, persist);
+    } else if (body.action === "restart_stack") {
+      await runRestartStack(body, log);
+    } else if (body.action === "repair_storage_buckets") {
+      await runRepairStorageBuckets(body, log);
+    } else if (body.action === "repair_realtime") {
+      await runRepairRealtime(body, log);
     } else {
       await runDeployment(body, log);
     }
@@ -1124,7 +1136,15 @@ Deno.serve(async (req) => {
             ? "Réparation upload/écrans lancée en arrière-plan."
             : action === "repair_local_api_url"
               ? "Réparation de l'URL API locale lancée en arrière-plan."
-              : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+              : action === "diagnose_server"
+                ? "Diagnostic du serveur lancé en arrière-plan."
+                : action === "restart_stack"
+                  ? "Redémarrage de la stack Docker lancé en arrière-plan."
+                  : action === "repair_storage_buckets"
+                    ? "Réparation des buckets Storage lancée en arrière-plan."
+                    : action === "repair_realtime"
+                      ? "Réparation Realtime lancée en arrière-plan."
+                      : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2116,6 +2136,235 @@ async function runCheckAdminStatus(
     await persist({ status: "running", check_result: result });
     (globalThis as any).__lastDeployResult = { action: "check_admin_status", ...result };
   } finally {
+}
+
+// ===== Read-only diagnostic of the deployed stack with suggested fixes =====
+async function runDiagnoseServer(
+  body: DeployBody,
+  log: (m: string) => Promise<void> | void,
+  persist: (patch: Record<string, unknown>) => Promise<void>,
+) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+
+  const checks: Array<{ key: string; label: string; ok: boolean; detail?: string; suggested_action?: string }> = [];
+  const add = (c: typeof checks[number]) => { checks.push(c); return c; };
+
+  try {
+    // Docker
+    const dockerVer = await exec(conn, `docker --version 2>&1 || echo MISSING`);
+    add({ key: "docker", label: "Docker installé", ok: !dockerVer.stdout.includes("MISSING"), detail: dockerVer.stdout.trim() });
+
+    // Project dirs
+    const repoCheck = await exec(conn, `[ -d ${remoteDir} ] && echo OK || echo MISSING`);
+    add({ key: "repo_dir", label: `Dossier app ${remoteDir}`, ok: repoCheck.stdout.includes("OK") });
+    const supaCheck = await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo MISSING`);
+    const supaPresent = supaCheck.stdout.includes("OK");
+    add({ key: "supabase_stack", label: "Stack Supabase locale", ok: supaPresent, suggested_action: supaPresent ? undefined : "redeploy" });
+
+    // Containers running
+    const ps = await exec(conn, `docker ps --format '{{.Names}}|{{.Status}}' 2>&1 || true`);
+    const psLines = ps.stdout.split("\n").filter(Boolean);
+    const has = (re: RegExp) => psLines.some((l) => re.test(l));
+    const webOk = has(/screenflow.*web|screenflow-web|^web\|/i) || has(/nginx/i);
+    add({ key: "container_web", label: "Conteneur web (frontend)", ok: webOk, suggested_action: webOk ? undefined : "restart_stack" });
+
+    if (supaPresent) {
+      const dbOk = has(/supabase-db|^db\|/i);
+      const restOk = has(/supabase-rest|^rest\|/i);
+      const authOk = has(/supabase-auth|gotrue|^auth\|/i);
+      const storageOk = has(/supabase-storage|^storage\|/i);
+      const realtimeOk = has(/supabase-realtime|^realtime\|/i);
+      const kongOk = has(/supabase-kong|^kong\|/i);
+      add({ key: "container_db", label: "Conteneur Postgres", ok: dbOk, suggested_action: dbOk ? undefined : "restart_stack" });
+      add({ key: "container_rest", label: "Conteneur REST (PostgREST)", ok: restOk, suggested_action: restOk ? undefined : "restart_stack" });
+      add({ key: "container_auth", label: "Conteneur Auth (GoTrue)", ok: authOk, suggested_action: authOk ? undefined : "restart_stack" });
+      add({ key: "container_storage", label: "Conteneur Storage", ok: storageOk, suggested_action: storageOk ? undefined : "repair_local_writes" });
+      add({ key: "container_realtime", label: "Conteneur Realtime", ok: realtimeOk, suggested_action: realtimeOk ? undefined : "repair_realtime" });
+      add({ key: "container_kong", label: "Gateway Kong", ok: kongOk, suggested_action: kongOk ? undefined : "restart_stack" });
+
+      // Read .env
+      const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || "8000";
+      const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY")
+        || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
+      const publicUrl = await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLIC_URL")
+        || await readRemoteEnv(conn, `${supaDir}/.env`, "API_EXTERNAL_URL") || "";
+      add({ key: "anon_key", label: "ANON_KEY présente", ok: !!anonKey, detail: anonKey ? `${anonKey.slice(0, 12)}…` : "absente", suggested_action: anonKey ? undefined : "repair_local_api_url" });
+      add({ key: "public_url", label: "SUPABASE_PUBLIC_URL configurée", ok: !!publicUrl, detail: publicUrl, suggested_action: publicUrl ? undefined : "repair_local_api_url" });
+
+      // HTTP probes from server
+      if (anonKey) {
+        const auth = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/auth/v1/health 2>/dev/null || echo 000`);
+        const rest = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/rest/v1/ -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || echo 000`);
+        const stor = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/storage/v1/bucket -H ${shQuote(`apikey: ${anonKey}`)} -H ${shQuote(`Authorization: Bearer ${anonKey}`)} 2>/dev/null || echo 000`);
+        const rt = await exec(conn, `curl -sS -m 8 -o /dev/null -w "%{http_code}" http://127.0.0.1:${kongPort}/realtime/v1/ 2>/dev/null || echo 000`);
+        const okHttp = (s: string) => /^(2|3|401|403|404|426)/.test(s.trim());
+        add({ key: "http_auth", label: "Auth HTTP", ok: okHttp(auth.stdout), detail: auth.stdout.trim(), suggested_action: okHttp(auth.stdout) ? undefined : "restart_stack" });
+        add({ key: "http_rest", label: "REST HTTP", ok: okHttp(rest.stdout), detail: rest.stdout.trim(), suggested_action: okHttp(rest.stdout) ? undefined : "repair_local_writes" });
+        add({ key: "http_storage", label: "Storage HTTP", ok: okHttp(stor.stdout), detail: stor.stdout.trim(), suggested_action: okHttp(stor.stdout) ? undefined : "repair_local_writes" });
+        add({ key: "http_realtime", label: "Realtime HTTP", ok: okHttp(rt.stdout), detail: rt.stdout.trim(), suggested_action: okHttp(rt.stdout) ? undefined : "repair_realtime" });
+      }
+
+      // Ensure psql works to inspect data
+      try {
+        await ensurePostgresSqlAccess(conn, supaDir, log);
+        const buckets = await exec(conn, dockerPsqlSelect(supaDir, "select string_agg(name, ',') from storage.buckets"));
+        const list = (buckets.stdout || "").trim();
+        const hasUploads = /\buploads\b/.test(list);
+        const hasMedia = /\bmedia\b/.test(list);
+        add({ key: "bucket_uploads", label: "Bucket 'uploads'", ok: hasUploads, suggested_action: hasUploads ? undefined : "repair_storage_buckets" });
+        add({ key: "bucket_media", label: "Bucket 'media'", ok: hasMedia, suggested_action: hasMedia ? undefined : "repair_storage_buckets" });
+
+        const pubTables = await exec(conn, dockerPsqlSelect(supaDir, "select count(*)::text from pg_publication_tables where pubname='supabase_realtime' and schemaname='public'"));
+        const n = parseInt((pubTables.stdout || "").trim().split("\n").find(l => /^\d+$/.test(l.trim())) || "0");
+        add({ key: "realtime_publication", label: "Publication Realtime (tables)", ok: n > 0, detail: `${n} table(s)`, suggested_action: n > 0 ? undefined : "repair_realtime" });
+
+        const adminCount = await exec(conn, dockerPsqlSelect(supaDir, "select count(*)::text from public.user_roles where role='admin'"));
+        const ac = parseInt((adminCount.stdout || "").trim().split("\n").find(l => /^\d+$/.test(l.trim())) || "0");
+        add({ key: "admin_account", label: "Compte admin global", ok: ac > 0, detail: `${ac} admin(s)`, suggested_action: ac > 0 ? undefined : "reset_admin_password" });
+      } catch (e: any) {
+        await log(`⚠ Inspection Postgres impossible: ${e?.message || e}`);
+      }
+    }
+
+    // Disk space
+    const df = await exec(conn, `df -h / | tail -1 | awk '{print $5" used on "$6}'`);
+    const used = parseInt((df.stdout || "0").trim().split("%")[0] || "0");
+    add({ key: "disk", label: "Espace disque /", ok: used < 90, detail: df.stdout.trim() });
+
+    await log("");
+    await log("════════════════════════════════════════════════════════════");
+    await log("📋  DIAGNOSTIC SERVEUR");
+    await log("════════════════════════════════════════════════════════════");
+    for (const c of checks) {
+      await log(`   ${c.ok ? "✓" : "✗"} ${c.label}${c.detail ? `  (${c.detail})` : ""}${!c.ok && c.suggested_action ? `  → fix: ${c.suggested_action}` : ""}`);
+    }
+    await log("════════════════════════════════════════════════════════════");
+
+    const failures = checks.filter((c) => !c.ok);
+    const suggestions = Array.from(new Set(failures.map((c) => c.suggested_action).filter(Boolean))) as string[];
+    await persist({ status: "running", diagnostic: { checks, suggestions } });
+    (globalThis as any).__lastDeployResult = { action: "diagnose_server", checks, suggestions };
+  } finally {
     try { conn.end(); } catch (_) {}
   }
 }
+
+// ===== Restart whole docker stack (web + supabase) =====
+async function runRestartStack(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const supaPresent = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (supaPresent) {
+      await log("→ Redémarrage de la stack Supabase locale…");
+      const r1 = await exec(conn, `cd ${supaDir} && (docker compose restart || docker-compose restart) 2>&1`);
+      await log(r1.stdout.split("\n").slice(-15).join("\n"));
+    } else {
+      await log("ℹ Aucune stack Supabase locale détectée — étape ignorée.");
+    }
+    const repoPresent = (await exec(conn, `[ -f ${remoteDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (repoPresent) {
+      await log("→ Redémarrage du conteneur web…");
+      const r2 = await exec(conn, `cd ${remoteDir} && (docker compose restart web || docker-compose restart web) 2>&1`);
+      await log(r2.stdout.split("\n").slice(-15).join("\n"));
+    }
+    await log("✓ Stack redémarrée");
+    (globalThis as any).__lastDeployResult = { action: "restart_stack", ok: true };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+// ===== Repair / re-create default Storage buckets (uploads, media) =====
+async function runRepairStorageBuckets(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const supaPresent = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (!supaPresent) throw new Error(`Aucune stack Supabase locale dans ${supaDir}`);
+    await ensurePostgresSqlAccess(conn, supaDir, log);
+
+    const sql = `
+      insert into storage.buckets (id, name, public, file_size_limit)
+      values ('uploads','uploads', true, 524288000)
+      on conflict (id) do update set public=excluded.public;
+      insert into storage.buckets (id, name, public, file_size_limit)
+      values ('media','media', true, 1073741824)
+      on conflict (id) do update set public=excluded.public;
+      do $$ begin
+        if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='public_read_uploads') then
+          create policy public_read_uploads on storage.objects for select using (bucket_id in ('uploads','media'));
+        end if;
+        if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='auth_write_uploads') then
+          create policy auth_write_uploads on storage.objects for insert to authenticated with check (bucket_id in ('uploads','media'));
+        end if;
+        if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='auth_update_uploads') then
+          create policy auth_update_uploads on storage.objects for update to authenticated using (bucket_id in ('uploads','media'));
+        end if;
+        if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='auth_delete_uploads') then
+          create policy auth_delete_uploads on storage.objects for delete to authenticated using (bucket_id in ('uploads','media'));
+        end if;
+      end $$;`;
+    const out = await exec(conn, dockerPsqlExec(supaDir, sql));
+    await log(out.stdout.split("\n").slice(-20).join("\n"));
+    await exec(conn, `cd ${supaDir} && (docker compose restart storage || docker-compose restart storage) 2>&1`);
+    await log("✓ Buckets 'uploads' et 'media' réparés");
+    (globalThis as any).__lastDeployResult = { action: "repair_storage_buckets", ok: true };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+// ===== Repair Realtime: restart container + ensure tables in publication =====
+async function runRepairRealtime(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    const supaPresent = (await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo NO`)).stdout.includes("OK");
+    if (!supaPresent) throw new Error(`Aucune stack Supabase locale dans ${supaDir}`);
+    await ensurePostgresSqlAccess(conn, supaDir, log);
+
+    const tables = ["screens", "media", "playlists", "playlist_items", "schedules", "notifications", "contents", "programs", "layouts"];
+    const sql = `
+      do $$ begin
+        if not exists (select 1 from pg_publication where pubname='supabase_realtime') then
+          create publication supabase_realtime;
+        end if;
+      end $$;
+      ${tables.map((t) => `do $$ begin
+        begin
+          execute 'alter table public.${t} replica identity full';
+        exception when undefined_table then null; end;
+        begin
+          execute 'alter publication supabase_realtime add table public.${t}';
+        exception when duplicate_object then null; when undefined_table then null; end;
+      end $$;`).join("\n")}
+    `;
+    const out = await exec(conn, dockerPsqlExec(supaDir, sql));
+    await log(out.stdout.split("\n").slice(-20).join("\n"));
+    await exec(conn, `cd ${supaDir} && (docker compose restart realtime || docker-compose restart realtime) 2>&1`);
+    await log("✓ Realtime réparé (publication + redémarrage)");
+    (globalThis as any).__lastDeployResult = { action: "repair_realtime", ok: true };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+

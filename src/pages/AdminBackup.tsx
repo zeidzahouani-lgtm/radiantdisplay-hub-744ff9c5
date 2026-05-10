@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Database, Download, Container, FileArchive, Loader2, Package, FileCode, Copy,
   Upload, CheckCircle2, XCircle, AlertCircle, ServerCog, Rocket, ShieldCheck,
-  Server, Terminal, Wifi, KeyRound, Trash2,
+  Server, Terminal, Wifi, KeyRound, Trash2, Stethoscope, RefreshCw, HardDrive, Radio,
 } from "lucide-react";
 import JSZip from "jszip";
 import { Textarea } from "@/components/ui/textarea";
@@ -1063,6 +1063,114 @@ To rebuild manually: docker compose up -d --build
     }
   };
 
+  // ===== Generic SSH action runner with polling =====
+  type DiagCheck = { key: string; label: string; ok: boolean; detail?: string; suggested_action?: string };
+  const [serverDiag, setServerDiag] = useState<{ checks: DiagCheck[]; suggestions: string[] } | null>(null);
+
+  const runSshAction = async (
+    action: string,
+    extra: Record<string, any> = {},
+    opts: { successMessage?: string; onResult?: (r: any) => void; initialLog?: string } = {},
+  ) => {
+    if (!sshHost || !sshUser || !sshPassword) {
+      toast.error("Renseignez l'IP, l'utilisateur et le mot de passe SSH");
+      return;
+    }
+    setSshDeploying(true);
+    setSshLogs([opts.initialLog || `▶ Action: ${action}`]);
+    try {
+      const accessToken = await getFreshAccessToken();
+      if (!accessToken) return;
+      const { data, error } = await supabase.functions.invoke("ssh-deploy", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: {
+          action,
+          host: sshHost.trim(),
+          local_ip: sshLocalIp.trim() || "127.0.0.1",
+          port: parseInt(sshPort) || 22,
+          username: sshUser.trim(),
+          password: sshPassword,
+          remote_dir: sshRemoteDir.trim() || "/opt/screenflow",
+          app_port: sshAppPort,
+          supabase_kong_http_port: sshSupaKongPort,
+          ...extra,
+        },
+      });
+      if (error) throw error;
+      const jobId = data?.job_id as string | undefined;
+      if (!jobId) throw new Error("Job non démarré");
+      const settingsKey = `ssh_deploy_job:${jobId}`;
+      const start = Date.now();
+      while (Date.now() - start < 5 * 60 * 1000) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const { data: row } = await supabase.from("app_settings").select("value").eq("key", settingsKey).maybeSingle();
+        if (!row?.value) continue;
+        let parsed: any;
+        try { parsed = JSON.parse(row.value as string); } catch { continue; }
+        if (Array.isArray(parsed.logs)) setSshLogs(parsed.logs);
+        if (parsed.status === "success") {
+          if (opts.onResult) opts.onResult(parsed.result || null);
+          toast.success(opts.successMessage || "Action terminée ✓");
+          return;
+        }
+        if (parsed.status === "error") {
+          toast.error("Échec : " + (parsed.error || "inconnu"));
+          return;
+        }
+      }
+      toast.warning("Délai dépassé — consultez les logs.");
+    } catch (e: any) {
+      setSshLogs((prev) => [...prev, "✗ Erreur: " + (e?.message || String(e))]);
+      toast.error("Erreur: " + (e?.message || String(e)));
+    } finally {
+      setSshDeploying(false);
+    }
+  };
+
+  const handleDiagnoseServer = () =>
+    runSshAction("diagnose_server", {}, {
+      initialLog: "🔎 Diagnostic du serveur en cours…",
+      successMessage: "Diagnostic terminé",
+      onResult: (r) => {
+        if (r?.checks) setServerDiag({ checks: r.checks, suggestions: r.suggestions || [] });
+      },
+    });
+
+  const handleRestartStack = () =>
+    runSshAction("restart_stack", {}, {
+      initialLog: "🔄 Redémarrage de la stack Docker…",
+      successMessage: "Stack redémarrée ✓",
+    });
+
+  const handleRepairBuckets = () =>
+    runSshAction("repair_storage_buckets", {}, {
+      initialLog: "🪣 Réparation des buckets Storage…",
+      successMessage: "Buckets réparés ✓",
+    });
+
+  const handleRepairRealtime = () =>
+    runSshAction("repair_realtime", {}, {
+      initialLog: "📡 Réparation Realtime…",
+      successMessage: "Realtime réparé ✓",
+    });
+
+  const handleRepairApiUrl = () =>
+    runSshAction("repair_local_api_url", {}, {
+      initialLog: "🌐 Correction de l'URL API locale…",
+      successMessage: "URL API corrigée ✓",
+      onResult: (r) => { if (r?.url) handleDeploySuccess(r.url, r.supabase_local || null); },
+    });
+
+  const fixActionMap: Record<string, { label: string; run: () => void }> = {
+    restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
+    repair_local_writes: { label: "Réparer upload/écrans", run: handleRepairLocalWrites },
+    repair_local_api_url: { label: "Corriger l'URL API", run: handleRepairApiUrl },
+    repair_storage_buckets: { label: "Réparer buckets Storage", run: handleRepairBuckets },
+    repair_realtime: { label: "Réparer Realtime", run: handleRepairRealtime },
+    reset_admin_password: { label: "Créer/réparer admin", run: handleResetAdminPassword },
+    redeploy: { label: "Relancer un déploiement complet", run: () => toast.info("Lancez 'Déployer maintenant' ci-dessous.") },
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-6xl">
       <div>
@@ -1832,6 +1940,55 @@ To rebuild manually: docker compose up -d --build
                 >
                   <ShieldCheck className="h-4 w-4" />Réparer upload/écrans
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairApiUrl}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Corrige SUPABASE_PUBLIC_URL / API_EXTERNAL_URL et le proxy Nginx"
+                >
+                  <Wifi className="h-4 w-4" />Corriger l'URL API
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairBuckets}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Recrée les buckets Storage 'uploads' et 'media' et leurs policies"
+                >
+                  <HardDrive className="h-4 w-4" />Réparer buckets Storage
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairRealtime}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Réajoute les tables à la publication supabase_realtime et redémarre le service"
+                >
+                  <Radio className="h-4 w-4" />Réparer Realtime
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRestartStack}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Redémarre tous les conteneurs Docker (web + Supabase local)"
+                >
+                  <RefreshCw className="h-4 w-4" />Redémarrer la stack
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={handleDiagnoseServer}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Vérifie l'état complet du serveur et propose des correctifs"
+                >
+                  <Stethoscope className="h-4 w-4" />Diagnostiquer le serveur
+                </Button>
                 {sshDeployedUrl && (
                   <a href={sshDeployedUrl} target="_blank" rel="noopener noreferrer">
                     <Button variant="outline" className="gap-2">
@@ -1855,6 +2012,52 @@ To rebuild manually: docker compose up -d --build
                     <p className="mt-2 text-muted-foreground">⚠ Le mot de passe Studio et le mot de passe Postgres sont dans le journal ci-dessous — sauvegardez-les.</p>
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {serverDiag && (
+                <div className="space-y-3 rounded-xl border bg-card/50 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Stethoscope className="h-4 w-4" />Diagnostic serveur
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {serverDiag.checks.filter(c => c.ok).length}/{serverDiag.checks.length} vérifications OK
+                    </span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {serverDiag.checks.map((c) => (
+                      <div key={c.key} className="flex items-start gap-2 text-xs p-2 rounded-lg bg-background border">
+                        {c.ok
+                          ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          : <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">{c.label}</div>
+                          {c.detail && <div className="text-muted-foreground truncate">{c.detail}</div>}
+                          {!c.ok && c.suggested_action && fixActionMap[c.suggested_action] && (
+                            <Button size="sm" variant="outline" className="h-6 mt-1 text-[11px]" onClick={fixActionMap[c.suggested_action].run} disabled={sshDeploying}>
+                              {fixActionMap[c.suggested_action].label}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {serverDiag.suggestions.length > 0 && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Correctifs proposés</AlertTitle>
+                      <AlertDescription>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {serverDiag.suggestions.filter(s => fixActionMap[s]).map((s) => (
+                            <Button key={s} size="sm" variant="secondary" onClick={fixActionMap[s].run} disabled={sshDeploying}>
+                              {fixActionMap[s].label}
+                            </Button>
+                          ))}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
               )}
 
               {sshLogs.length > 0 && (
