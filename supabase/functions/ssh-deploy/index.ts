@@ -1420,6 +1420,7 @@ async function runDeployment(body: DeployBody, log: (m: string) => Promise<void>
         await startLocalSupabaseEssentials(conn, supaDir, log, true);
         await ensureLocalApiServices(conn, supaDir, supaKongPort, anonKey, log);
         const supaBrowserUrl = resolveBrowserAppBase(body, appPort, enableHttps, httpsDomain, httpsPort);
+        await exec(conn, `cd ${supaDir} && for k in SITE_URL API_EXTERNAL_URL SUPABASE_PUBLIC_URL; do sed -i "/^$k=/d" .env; done && printf 'SITE_URL=%s\nAPI_EXTERNAL_URL=%s\nSUPABASE_PUBLIC_URL=%s\n' ${shQuote(supaBrowserUrl)} ${shQuote(supaBrowserUrl)} ${shQuote(supaBrowserUrl)} >> .env && docker compose restart auth storage rest kong 2>&1 || true`);
         supabaseUrlOverride = supaBrowserUrl;
         supabaseAnonOverride = anonKey;
         supabaseProjectIdOverride = "local";
@@ -1723,7 +1724,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
           await log("✓ Compte admin par défaut prêt — login : screenflow@screenflow.local / 260390DS");
 
           // Confirme explicitement Auth + Storage via l'IP locale
-          await log(`→ Confirmation finale Auth/Storage via ${supaBrowserUrl}…`);
+          await log(`→ Confirmation finale Auth/Storage via ${supabaseUrlOverride || appUrl}…`);
           try {
             await verifyAuthLoginFromServer(
               conn,
