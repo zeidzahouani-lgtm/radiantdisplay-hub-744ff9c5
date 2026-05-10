@@ -995,6 +995,55 @@ To rebuild manually: docker compose up -d --build
     }
   };
 
+  const handleRepairLocalWrites = async () => {
+    if (!sshHost || !sshUser || !sshPassword) {
+      toast.error("Renseignez l'IP, l'utilisateur et le mot de passe SSH");
+      return;
+    }
+
+    setSshDeploying(true);
+    setSshLogs(["🛠 Réparation upload médias / création écrans…"]);
+    try {
+      const accessToken = await getFreshAccessToken();
+      if (!accessToken) return;
+
+      const { data, error } = await supabase.functions.invoke("ssh-deploy", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: {
+          action: "repair_local_writes",
+          host: sshHost.trim(),
+          port: parseInt(sshPort) || 22,
+          username: sshUser.trim(),
+          password: sshPassword,
+          remote_dir: sshRemoteDir.trim() || "/opt/screenflow",
+          supabase_kong_http_port: sshSupaKongPort,
+        },
+      });
+      if (error) throw error;
+      const jobId = data?.job_id as string | undefined;
+      if (!jobId) throw new Error("Job non démarré");
+
+      const settingsKey = `ssh_deploy_job:${jobId}`;
+      const start = Date.now();
+      while (Date.now() - start < 5 * 60 * 1000) {
+        await new Promise(r => setTimeout(r, 3000));
+        const { data: row } = await supabase.from("app_settings").select("value").eq("key", settingsKey).maybeSingle();
+        if (!row?.value) continue;
+        let parsed: any;
+        try { parsed = JSON.parse(row.value as string); } catch { continue; }
+        if (Array.isArray(parsed.logs)) setSshLogs(parsed.logs);
+        if (parsed.status === "success") { toast.success("Upload et création d'écrans réparés ✓"); return; }
+        if (parsed.status === "error") { toast.error("Échec : " + (parsed.error || "inconnu")); return; }
+      }
+      toast.warning("Délai dépassé — consultez les logs.");
+    } catch (e: any) {
+      setSshLogs(prev => [...prev, "✗ Erreur: " + (e?.message || String(e))]);
+      toast.error("Erreur: " + (e?.message || String(e)));
+    } finally {
+      setSshDeploying(false);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-6xl">
       <div>
@@ -1744,6 +1793,16 @@ To rebuild manually: docker compose up -d --build
                   title="Crée ou répare le premier compte admin screenflow@screenflow.local sur le serveur"
                 >
                   <AlertCircle className="h-4 w-4" />Créer/réparer admin
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={handleRepairLocalWrites}
+                  disabled={sshDeploying || !sshHost || !sshUser || !sshPassword}
+                  title="Corrige les permissions locales Storage/RLS sans réinstaller le serveur"
+                >
+                  <ShieldCheck className="h-4 w-4" />Réparer upload/écrans
                 </Button>
                 {sshDeployedUrl && (
                   <a href={sshDeployedUrl} target="_blank" rel="noopener noreferrer">

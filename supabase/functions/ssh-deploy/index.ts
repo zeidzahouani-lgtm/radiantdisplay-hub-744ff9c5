@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes";
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -533,6 +533,28 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
 async function applyLocalDashboardWriteHotfix(conn: Client, supaDir: string, log: (m: string) => Promise<void> | void) {
   await log("→ Correction des permissions locales upload/écrans…");
   const sql = `
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT SELECT ON storage.buckets TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('media', 'media', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Local dashboard can manage screens" ON public.screens;
+CREATE POLICY "Local dashboard can manage screens" ON public.screens
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Local dashboard can manage media" ON public.media;
+CREATE POLICY "Local dashboard can manage media" ON public.media
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Users can insert establishment screens" ON public.screens;
 CREATE POLICY "Users can insert establishment screens" ON public.screens
 FOR INSERT TO authenticated
@@ -567,9 +589,26 @@ FOR ALL TO authenticated
 USING (public.has_role(auth.uid(), 'admin'::public.app_role))
 WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
 
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('media', 'media', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
+DROP POLICY IF EXISTS "Local dashboard can read media files" ON storage.objects;
+CREATE POLICY "Local dashboard can read media files" ON storage.objects
+FOR SELECT TO anon, authenticated
+USING (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Local dashboard can upload media files" ON storage.objects;
+CREATE POLICY "Local dashboard can upload media files" ON storage.objects
+FOR INSERT TO anon, authenticated
+WITH CHECK (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Local dashboard can update media files" ON storage.objects;
+CREATE POLICY "Local dashboard can update media files" ON storage.objects
+FOR UPDATE TO anon, authenticated
+USING (bucket_id = 'media')
+WITH CHECK (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Local dashboard can delete media files" ON storage.objects;
+CREATE POLICY "Local dashboard can delete media files" ON storage.objects
+FOR DELETE TO anon, authenticated
+USING (bucket_id = 'media');
 
 DROP POLICY IF EXISTS "Authenticated users can upload media files" ON storage.objects;
 CREATE POLICY "Authenticated users can upload media files" ON storage.objects
@@ -976,7 +1015,11 @@ async function runDeploymentJob(
     } else if (body.action === "check_admin_status") {
       await runCheckAdminStatus(body, log, persist);
     } else {
-      await runDeployment(body, log);
+      if (body.action === "repair_local_writes") {
+        await runRepairLocalWrites(body, log);
+      } else {
+        await runDeployment(body, log);
+      }
     }
     await persist({ status: "success", logs, result: (globalThis as any).__lastDeployResult || null });
   } catch (e: any) {
@@ -1047,8 +1090,10 @@ Deno.serve(async (req) => {
       message: action === "reset_admin_password"
         ? "Réinitialisation du mot de passe admin lancée en arrière-plan."
         : action === "check_admin_status"
-        ? "Vérification du compte admin lancée en arrière-plan."
-        : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+          ? "Vérification du compte admin lancée en arrière-plan."
+          : action === "repair_local_writes"
+            ? "Réparation upload/écrans lancée en arrière-plan."
+            : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1643,6 +1688,34 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
   } catch (innerErr: any) {
     try { conn.end(); } catch (_) {}
     throw innerErr;
+  }
+}
+
+async function runRepairLocalWrites(body: DeployBody, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const remoteDir = body.remote_dir || "/opt/screenflow";
+  const supaDir = `${remoteDir}/supabase`;
+
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+
+  try {
+    const check = await exec(conn, `[ -f ${supaDir}/docker-compose.yml ] && echo OK || echo MISSING`);
+    if (!check.stdout.includes("OK")) {
+      throw new Error(`Aucune stack backend locale trouvée dans ${supaDir}. Lancez d'abord un déploiement complet avec Supabase local.`);
+    }
+    await ensurePostgresSqlAccess(conn, supaDir, log);
+    await applyLocalDashboardWriteHotfix(conn, supaDir, log);
+
+    const kongPort = await readRemoteEnv(conn, `${supaDir}/.env`, "KONG_HTTP_PORT") || body.supabase_kong_http_port || "8000";
+    const anonKey = await readRemoteEnv(conn, `${supaDir}/.env`, "ANON_KEY") || await readRemoteEnv(conn, `${supaDir}/.env`, "SUPABASE_PUBLISHABLE_KEY");
+    if (anonKey) await ensureLocalApiServices(conn, supaDir, kongPort, anonKey, log);
+    await exec(conn, `cd ${supaDir} && docker compose restart rest storage kong 2>&1 || true`);
+    await log("✓ Réparation upload/écrans appliquée. Rechargez l'application déployée puis retestez.");
+    (globalThis as any).__lastDeployResult = { action: "repair_local_writes", ok: true };
+  } finally {
+    try { conn.end(); } catch (_) {}
   }
 }
 
