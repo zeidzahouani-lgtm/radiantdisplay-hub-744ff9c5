@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import { explainSupabaseError } from "@/lib/env";
+import { explainSupabaseError, getAppBasePath } from "@/lib/env";
 import { useAuth } from "@/hooks/useAuth";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
