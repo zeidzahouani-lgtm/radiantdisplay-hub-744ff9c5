@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes";
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -533,6 +533,28 @@ async function ensureLocalApiServices(conn: Client, supaDir: string, kongPort: s
 async function applyLocalDashboardWriteHotfix(conn: Client, supaDir: string, log: (m: string) => Promise<void> | void) {
   await log("→ Correction des permissions locales upload/écrans…");
   const sql = `
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT SELECT ON storage.buckets TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('media', 'media', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Local dashboard can manage screens" ON public.screens;
+CREATE POLICY "Local dashboard can manage screens" ON public.screens
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Local dashboard can manage media" ON public.media;
+CREATE POLICY "Local dashboard can manage media" ON public.media
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Users can insert establishment screens" ON public.screens;
 CREATE POLICY "Users can insert establishment screens" ON public.screens
 FOR INSERT TO authenticated
@@ -567,9 +589,26 @@ FOR ALL TO authenticated
 USING (public.has_role(auth.uid(), 'admin'::public.app_role))
 WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
 
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('media', 'media', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
+DROP POLICY IF EXISTS "Local dashboard can read media files" ON storage.objects;
+CREATE POLICY "Local dashboard can read media files" ON storage.objects
+FOR SELECT TO anon, authenticated
+USING (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Local dashboard can upload media files" ON storage.objects;
+CREATE POLICY "Local dashboard can upload media files" ON storage.objects
+FOR INSERT TO anon, authenticated
+WITH CHECK (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Local dashboard can update media files" ON storage.objects;
+CREATE POLICY "Local dashboard can update media files" ON storage.objects
+FOR UPDATE TO anon, authenticated
+USING (bucket_id = 'media')
+WITH CHECK (bucket_id = 'media');
+
+DROP POLICY IF EXISTS "Local dashboard can delete media files" ON storage.objects;
+CREATE POLICY "Local dashboard can delete media files" ON storage.objects
+FOR DELETE TO anon, authenticated
+USING (bucket_id = 'media');
 
 DROP POLICY IF EXISTS "Authenticated users can upload media files" ON storage.objects;
 CREATE POLICY "Authenticated users can upload media files" ON storage.objects
