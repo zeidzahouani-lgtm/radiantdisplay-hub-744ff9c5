@@ -166,7 +166,27 @@ echo "===PROCESSES===" && ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head -6
     // Storage size estimate (sum of media rows is not size; we just count)
     const { data: recentScreens } = await (supabase as any).from("screens").select("id,name,status,player_heartbeat_at").limit(20).order("updated_at", { ascending: false });
 
-    const database = { tables: counts, recent_screens: recentScreens || [] };
+    // Local Postgres size from SSH
+    const localPgSize = parseInt(get("PG_SIZE").trim()) || 0;
+    const pgContainer = get("PG_CONTAINER");
+    const pgDatabases = get("PG_DBS").split("\n").filter(Boolean).map((l) => {
+      const [name, size] = l.split("|");
+      return { name: name?.trim() || "", size: parseInt(size?.trim() || "0") };
+    });
+    const diskTotal = parseInt(diskParts[0] || "0");
+    const dbSaturationPct = diskTotal > 0 ? (localPgSize / diskTotal) * 100 : 0;
+
+    const database = {
+      tables: counts,
+      recent_screens: recentScreens || [],
+      local: {
+        container: pgContainer,
+        size_bytes: localPgSize,
+        saturation_pct: dbSaturationPct,
+        disk_total_bytes: diskTotal,
+        databases: pgDatabases,
+      },
+    };
 
     return new Response(JSON.stringify({ success: true, server, database, timestamp: new Date().toISOString() }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
