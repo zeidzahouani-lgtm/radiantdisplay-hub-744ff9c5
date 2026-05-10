@@ -1061,6 +1061,8 @@ async function runDeploymentJob(
       await runRepairStorageBuckets(body, log);
     } else if (body.action === "repair_realtime") {
       await runRepairRealtime(body, log);
+    } else if (body.action === "apply_local_migrations") {
+      directResult = await runApplyLocalMigrations(body, log);
     } else {
       await runDeployment(body, log);
     }
