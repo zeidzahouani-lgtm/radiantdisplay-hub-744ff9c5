@@ -1687,7 +1687,7 @@ CMD ["nginx","-g","daemon off;"]
       const localFunctions = [
         "admin-diagnostics", "bootstrap-admin", "restore-backup", "ai-assistant", "check-email-replies", "check-inbox",
         "content-action", "content-webhook", "generate-devis", "invite-user", "resend-ack",
-        "screen-setup-guide", "send-credentials", "server-stats", "sync-client-dravox", "test-email",
+        "screen-setup-guide", "send-credentials", "server-stats", "ssh-deploy", "sync-client-dravox", "test-email",
       ];
       // CORS strategy mirrors the static nginx.conf:
       //   - A named error_page location returns 204 with full CORS headers for OPTIONS.
