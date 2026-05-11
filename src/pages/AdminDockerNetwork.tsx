@@ -14,11 +14,11 @@ import {
   CheckCircle2, XCircle, RefreshCw, Stethoscope, Terminal, AlertCircle, Server, KeyRound,
 } from "lucide-react";
 
-const SSH_CONFIG_KEY = "screenflow.ssh_deploy_config.v1";
 const NET_CONFIG_KEY = "screenflow.docker_network_config.v1";
+const LEGACY_SSH_CONFIG_KEY = "screenflow.ssh_deploy_config.v1";
 
 export default function AdminDockerNetwork() {
-  // ===== SSH credentials (shared with backup page via localStorage, but isolated UI) =====
+  // ===== SSH credentials dedicated to Docker network operations only =====
   const [sshHost, setSshHost] = useState("");
   const [sshPort, setSshPort] = useState("22");
   const [sshUser, setSshUser] = useState("root");
@@ -30,17 +30,15 @@ export default function AdminDockerNetwork() {
     if (loadedRef.current) return;
     loadedRef.current = true;
     try {
-      const raw = localStorage.getItem(SSH_CONFIG_KEY);
-      if (raw) {
-        const c = JSON.parse(raw);
-        if (c.sshHost) setSshHost(c.sshHost);
-        if (c.sshPort) setSshPort(c.sshPort);
-        if (c.sshUser) setSshUser(c.sshUser);
-        if (c.sshRemoteDir) setSshRemoteDir(c.sshRemoteDir);
-      }
       const rawNet = localStorage.getItem(NET_CONFIG_KEY);
+      let hasNetworkSshConfig = false;
       if (rawNet) {
         const n = JSON.parse(rawNet);
+        hasNetworkSshConfig = !!(n.sshHost || n.sshPort || n.sshUser || n.sshRemoteDir);
+        if (n.sshHost) setSshHost(n.sshHost);
+        if (n.sshPort) setSshPort(n.sshPort);
+        if (n.sshUser) setSshUser(n.sshUser);
+        if (n.sshRemoteDir) setSshRemoteDir(n.sshRemoteDir);
         if (n.netName) setNetName(n.netName);
         if (n.netSubnet) setNetSubnet(n.netSubnet);
         if (n.netGateway) setNetGateway(n.netGateway);
@@ -51,21 +49,27 @@ export default function AdminDockerNetwork() {
         if (n.sysHostname) setSysHostname(n.sysHostname);
         if (n.sysHostAlias) setSysHostAlias(n.sysHostAlias);
       }
+      if (!hasNetworkSshConfig) {
+        const legacyRaw = localStorage.getItem(LEGACY_SSH_CONFIG_KEY);
+        if (legacyRaw) {
+          const c = JSON.parse(legacyRaw);
+          if (c.sshHost) setSshHost(c.sshHost);
+          if (c.sshPort) setSshPort(c.sshPort);
+          if (c.sshUser) setSshUser(c.sshUser);
+          if (c.sshRemoteDir) setSshRemoteDir(c.sshRemoteDir);
+        }
+      }
     } catch {}
   }, []);
 
-  // Persist SSH minimal subset + network config locally
+  // Persist network-specific SSH config locally without touching deployment SSH config.
   const persist = () => {
     try {
-      const raw = localStorage.getItem(SSH_CONFIG_KEY);
-      const prev = raw ? JSON.parse(raw) : {};
-      localStorage.setItem(SSH_CONFIG_KEY, JSON.stringify({
-        ...prev, sshHost, sshPort, sshUser, sshRemoteDir,
-        _saved_at: new Date().toISOString(),
-      }));
       localStorage.setItem(NET_CONFIG_KEY, JSON.stringify({
+        sshHost, sshPort, sshUser, sshRemoteDir,
         netName, netSubnet, netGateway, netIpRange, netMtu, netDns,
         netContainerIps, sysHostname, sysHostAlias,
+        _saved_at: new Date().toISOString(),
       }));
     } catch {}
   };
