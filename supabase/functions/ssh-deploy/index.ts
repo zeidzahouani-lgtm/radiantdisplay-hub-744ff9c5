@@ -2969,3 +2969,58 @@ async function runNetworkGetConfig(body: DeployBody, log: (m: string) => Promise
     try { conn.end(); } catch (_) {}
   }
 }
+
+// ===== Live per-container IP change (no compose redeploy) =====
+async function runNetworkSetContainerIp(body: DeployBody & { network_name?: string; container_id?: string; container_name?: string; new_ip?: string }, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const netName = (body.network_name || "screenflow_default").trim();
+  const target = (body.container_id || body.container_name || "").trim();
+  const newIp = (body.new_ip || "").trim();
+  if (!target) throw new Error("container_id ou container_name requis");
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(newIp)) throw new Error(`IP invalide: ${newIp}`);
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    // Resolve real container name from id (works with both)
+    const resolve = await exec(conn, `docker inspect --format '{{.Name}}' ${target} 2>&1 | sed 's#^/##'`);
+    if (resolve.code !== 0 || !resolve.stdout.trim()) {
+      throw new Error(`Conteneur introuvable: ${target} (${resolve.stderr || resolve.stdout})`);
+    }
+    const cname = resolve.stdout.trim();
+    await log(`  • Conteneur résolu: ${cname}`);
+
+    // Verify the network exists
+    const netCheck = await exec(conn, `docker network inspect ${netName} --format 'OK' 2>&1`);
+    if (!netCheck.stdout.includes("OK")) {
+      throw new Error(`Réseau Docker introuvable: ${netName}`);
+    }
+
+    await log(`→ Déconnexion de ${cname} du réseau ${netName}…`);
+    await exec(conn, `docker network disconnect ${netName} ${cname} 2>&1 || true`);
+
+    await log(`→ Reconnexion avec IP ${newIp}…`);
+    const r = await exec(conn, `docker network connect --ip ${newIp} ${netName} ${cname} 2>&1`);
+    if (r.code !== 0) {
+      // Try to reconnect without static IP to recover
+      await exec(conn, `docker network connect ${netName} ${cname} 2>&1 || true`);
+      throw new Error(`Échec attribution IP ${newIp}: ${r.stdout || r.stderr}`);
+    }
+
+    // Confirm new IP
+    const verify = await exec(conn, `docker inspect ${cname} --format '{{(index .NetworkSettings.Networks "${netName}").IPAddress}}' 2>&1`);
+    const appliedIp = verify.stdout.trim();
+    await log(`✓ IP appliquée en direct: ${appliedIp}`);
+
+    return {
+      action: "network_set_container_ip",
+      ok: true,
+      network: netName,
+      container: cname,
+      requested_ip: newIp,
+      applied_ip: appliedIp,
+    };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
