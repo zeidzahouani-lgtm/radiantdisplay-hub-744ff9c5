@@ -44,6 +44,7 @@ const Team = lazy(() => import("./pages/Team"));
 const AdminBackup = lazy(() => import("./pages/AdminBackup"));
 const AdminServerStatus = lazy(() => import("./pages/AdminServerStatus"));
 const AdminHealth = lazy(() => import("./pages/AdminHealth"));
+const AdminDockerNetwork = lazy(() => import("./pages/AdminDockerNetwork"));
 const FirstAdminLogin = lazy(() => import("./pages/FirstAdminLogin"));
 
 const queryClient = new QueryClient({
