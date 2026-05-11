@@ -1298,6 +1298,39 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
+  // Live container IP editing (no redeploy)
+  const [containerIpEdits, setContainerIpEdits] = useState<Record<string, string>>({});
+  const [manualCid, setManualCid] = useState("");
+  const [manualNewIp, setManualNewIp] = useState("");
+  const [manualNetName, setManualNetName] = useState("screenflow_default");
+
+  const handleApplyLiveContainerIp = (network: string, containerIdOrName: string, label: string) => {
+    const ip = (containerIpEdits[containerIdOrName] || "").trim();
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) { toast.error(`IP invalide pour ${label}: ${ip}`); return; }
+    runSshAction("network_set_container_ip", {
+      network_name: network,
+      container_id: containerIdOrName,
+      new_ip: ip,
+    }, {
+      initialLog: `🔧 Application live de l'IP ${ip} sur ${label} (réseau ${network})…`,
+      successMessage: `IP ${ip} appliquée sur ${label} ✓`,
+      onResult: () => { setTimeout(handleNetworkInspect, 800); },
+    });
+  };
+
+  const handleManualContainerIp = () => {
+    if (!manualCid.trim()) { toast.error("ID ou nom du conteneur requis"); return; }
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(manualNewIp.trim())) { toast.error("IP invalide"); return; }
+    runSshAction("network_set_container_ip", {
+      network_name: manualNetName.trim() || "screenflow_default",
+      container_id: manualCid.trim(),
+      new_ip: manualNewIp.trim(),
+    }, {
+      initialLog: `🔧 Modification IP live: ${manualCid} → ${manualNewIp}…`,
+      successMessage: "IP appliquée en direct ✓",
+      onResult: () => { setTimeout(handleNetworkInspect, 800); },
+    });
+  };
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
     quick_update: { label: "Mise à jour rapide", run: handleQuickUpdate },
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
