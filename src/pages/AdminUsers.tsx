@@ -115,7 +115,19 @@ export default function AdminUsers() {
       const res = await supabase.functions.invoke("invite-user", {
         body: { email, password, display_name: displayName },
       });
-      if (res.error) throw res.error;
+      if (res.error) {
+        // Extract the real error message from the function response body
+        let detail = "";
+        try {
+          const ctxRes = (res.error as any)?.context?.response;
+          if (ctxRes && typeof ctxRes.json === "function") {
+            const body = await ctxRes.clone().json();
+            detail = body?.error || "";
+          }
+        } catch {}
+        if (!detail && res.data?.error) detail = res.data.error;
+        throw new Error(detail || (res.error as any).message || "Erreur lors de la création");
+      }
       if (res.data?.error) throw new Error(res.data.error);
       return res.data;
     },
