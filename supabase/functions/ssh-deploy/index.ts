@@ -14,7 +14,7 @@ const corsHeaders = {
 
 interface DeployBody {
   // Action: "deploy" (default), "reset_admin_password", or "check_admin_status" (read-only diagnostic)
-  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet" | "network_set_hostname" | "network_get_config";
+  action?: "deploy" | "reset_admin_password" | "check_admin_status" | "repair_local_writes" | "repair_local_api_url" | "diagnose_server" | "restart_stack" | "repair_storage_buckets" | "repair_realtime" | "apply_local_migrations" | "quick_update" | "network_inspect" | "network_recreate" | "network_set_subnet" | "network_set_hostname" | "network_get_config" | "network_set_container_ip";
   // Custom Docker network subnet (CIDR), e.g. 172.28.0.0/16
   network_subnet?: string;
   network_gateway?: string;
@@ -25,6 +25,9 @@ interface DeployBody {
   container_ips?: Record<string, string>; // service_name -> static IP
   hostname?: string;                // system hostname
   hostname_alias?: string;          // /etc/hosts alias for the host IP
+  container_id?: string;            // Docker container ID for live IP change
+  container_name?: string;          // Docker container name for live IP change
+  new_ip?: string;                  // New static IP to assign live
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
@@ -1162,6 +1165,8 @@ async function runDeploymentJob(
       directResult = await runNetworkSetHostname(body, log);
     } else if (body.action === "network_get_config") {
       directResult = await runNetworkGetConfig(body, log);
+    } else if (body.action === "network_set_container_ip") {
+      directResult = await runNetworkSetContainerIp(body, log);
     } else {
       await runDeployment(body, log);
     }
@@ -1262,7 +1267,9 @@ Deno.serve(async (req) => {
                                   ? "Mise à jour du hostname système lancée en arrière-plan."
                                   : action === "network_get_config"
                                     ? "Lecture de la configuration réseau lancée en arrière-plan."
-                                    : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
+                                    : action === "network_set_container_ip"
+                                      ? "Modification IP conteneur (live Docker) lancée en arrière-plan."
+                                      : "Déploiement lancé en arrière-plan. Suivez la progression via le polling.",
     }), {
       status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2746,7 +2753,9 @@ async function runNetworkInspect(body: DeployBody, log: (m: string) => Promise<v
       try {
         const parsed = JSON.parse(insp.stdout.trim());
         const ipam = parsed.IPAM?.Config?.[0] || {};
-        const containers = Object.values(parsed.Containers || {}).map((c: any) => ({
+        const containers = Object.entries(parsed.Containers || {}).map(([cid, c]: [string, any]) => ({
+          id: cid,
+          id_short: String(cid).substring(0, 12),
           name: c.Name,
           ipv4: c.IPv4Address,
           mac: c.MacAddress,
@@ -2960,6 +2969,61 @@ async function runNetworkGetConfig(body: DeployBody, log: (m: string) => Promise
       action: "network_get_config", ok: true,
       hostname: hn, fqdn, gateway, dns,
       ip_addresses: ipAddr, routes, hosts_file: hosts,
+    };
+  } finally {
+    try { conn.end(); } catch (_) {}
+  }
+}
+
+// ===== Live per-container IP change (no compose redeploy) =====
+async function runNetworkSetContainerIp(body: DeployBody & { network_name?: string; container_id?: string; container_name?: string; new_ip?: string }, log: (m: string) => Promise<void> | void) {
+  const port = body.port ?? 22;
+  const netName = (body.network_name || "screenflow_default").trim();
+  const target = (body.container_id || body.container_name || "").trim();
+  const newIp = (body.new_ip || "").trim();
+  if (!target) throw new Error("container_id ou container_name requis");
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(newIp)) throw new Error(`IP invalide: ${newIp}`);
+  await log(`→ Connexion SSH ${body.username}@${body.host}:${port}…`);
+  const conn = await ssh({ host: body.host, port, username: body.username, password: body.password });
+  await log("✓ SSH connecté");
+  try {
+    // Resolve real container name from id (works with both)
+    const resolve = await exec(conn, `docker inspect --format '{{.Name}}' ${target} 2>&1 | sed 's#^/##'`);
+    if (resolve.code !== 0 || !resolve.stdout.trim()) {
+      throw new Error(`Conteneur introuvable: ${target} (${resolve.stderr || resolve.stdout})`);
+    }
+    const cname = resolve.stdout.trim();
+    await log(`  • Conteneur résolu: ${cname}`);
+
+    // Verify the network exists
+    const netCheck = await exec(conn, `docker network inspect ${netName} --format 'OK' 2>&1`);
+    if (!netCheck.stdout.includes("OK")) {
+      throw new Error(`Réseau Docker introuvable: ${netName}`);
+    }
+
+    await log(`→ Déconnexion de ${cname} du réseau ${netName}…`);
+    await exec(conn, `docker network disconnect ${netName} ${cname} 2>&1 || true`);
+
+    await log(`→ Reconnexion avec IP ${newIp}…`);
+    const r = await exec(conn, `docker network connect --ip ${newIp} ${netName} ${cname} 2>&1`);
+    if (r.code !== 0) {
+      // Try to reconnect without static IP to recover
+      await exec(conn, `docker network connect ${netName} ${cname} 2>&1 || true`);
+      throw new Error(`Échec attribution IP ${newIp}: ${r.stdout || r.stderr}`);
+    }
+
+    // Confirm new IP
+    const verify = await exec(conn, `docker inspect ${cname} --format '{{(index .NetworkSettings.Networks "${netName}").IPAddress}}' 2>&1`);
+    const appliedIp = verify.stdout.trim();
+    await log(`✓ IP appliquée en direct: ${appliedIp}`);
+
+    return {
+      action: "network_set_container_ip",
+      ok: true,
+      network: netName,
+      container: cname,
+      requested_ip: newIp,
+      applied_ip: appliedIp,
     };
   } finally {
     try { conn.end(); } catch (_) {}

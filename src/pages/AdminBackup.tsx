@@ -1298,6 +1298,39 @@ To rebuild manually: docker compose up -d --build
     });
   };
 
+  // Live container IP editing (no redeploy)
+  const [containerIpEdits, setContainerIpEdits] = useState<Record<string, string>>({});
+  const [manualCid, setManualCid] = useState("");
+  const [manualNewIp, setManualNewIp] = useState("");
+  const [manualNetName, setManualNetName] = useState("screenflow_default");
+
+  const handleApplyLiveContainerIp = (network: string, containerIdOrName: string, label: string) => {
+    const ip = (containerIpEdits[containerIdOrName] || "").trim();
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) { toast.error(`IP invalide pour ${label}: ${ip}`); return; }
+    runSshAction("network_set_container_ip", {
+      network_name: network,
+      container_id: containerIdOrName,
+      new_ip: ip,
+    }, {
+      initialLog: `🔧 Application live de l'IP ${ip} sur ${label} (réseau ${network})…`,
+      successMessage: `IP ${ip} appliquée sur ${label} ✓`,
+      onResult: () => { setTimeout(handleNetworkInspect, 800); },
+    });
+  };
+
+  const handleManualContainerIp = () => {
+    if (!manualCid.trim()) { toast.error("ID ou nom du conteneur requis"); return; }
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(manualNewIp.trim())) { toast.error("IP invalide"); return; }
+    runSshAction("network_set_container_ip", {
+      network_name: manualNetName.trim() || "screenflow_default",
+      container_id: manualCid.trim(),
+      new_ip: manualNewIp.trim(),
+    }, {
+      initialLog: `🔧 Modification IP live: ${manualCid} → ${manualNewIp}…`,
+      successMessage: "IP appliquée en direct ✓",
+      onResult: () => { setTimeout(handleNetworkInspect, 800); },
+    });
+  };
   const fixActionMap: Record<string, { label: string; run: () => void }> = {
     quick_update: { label: "Mise à jour rapide", run: handleQuickUpdate },
     restart_stack: { label: "Redémarrer la stack", run: handleRestartStack },
@@ -1851,6 +1884,36 @@ To rebuild manually: docker compose up -d --build
                 </Button>
               </div>
 
+              <Separator />
+
+              {/* ===== Live IP change by container ID ===== */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><Container className="h-4 w-4" />Modifier l'IP d'un conteneur en direct</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Applique l'IP immédiatement via <code>docker network disconnect/connect</code> sans redémarrer la stack ni redéployer. Utilisez l'ID Docker (12 caractères) ou le nom exact du conteneur.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="manual-net">Réseau Docker</Label>
+                    <Input id="manual-net" value={manualNetName} onChange={(e) => setManualNetName(e.target.value)} placeholder="screenflow_default" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="manual-cid">ID ou nom du conteneur</Label>
+                    <Input id="manual-cid" value={manualCid} onChange={(e) => setManualCid(e.target.value)} placeholder="ex: a1b2c3d4e5f6 ou screenflow-web" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="manual-ip">Nouvelle IP</Label>
+                    <Input id="manual-ip" value={manualNewIp} onChange={(e) => setManualNewIp(e.target.value)} placeholder="172.28.0.42" />
+                  </div>
+                </div>
+                <Button onClick={handleManualContainerIp} disabled={sshDeploying || !manualCid.trim() || !manualNewIp.trim()} className="gap-2">
+                  {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Appliquer l'IP en direct
+                </Button>
+              </div>
+
               {networkConfig && (
                 <>
                   <Separator />
@@ -1897,15 +1960,37 @@ To rebuild manually: docker compose up -d --build
                               <div><span className="text-muted-foreground">Gateway:</span> <code>{d.gateway || "—"}</code></div>
                             </div>
                             {d.containers?.length > 0 && (
-                              <div className="space-y-1">
-                                <p className="text-xs text-muted-foreground">Conteneurs ({d.containers.length}):</p>
-                                <div className="space-y-1">
-                                  {d.containers.map((c: any) => (
-                                    <div key={c.name} className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1">
-                                      <code>{c.name}</code>
-                                      <code className="text-muted-foreground">{c.ipv4}</code>
-                                    </div>
-                                  ))}
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">Conteneurs ({d.containers.length}) — modifier l'IP en direct sans redéployer :</p>
+                                <div className="space-y-1.5">
+                                  {d.containers.map((c: any) => {
+                                    const key = c.id || c.name;
+                                    const currentIp = (c.ipv4 || "").split("/")[0];
+                                    return (
+                                      <div key={key} className="grid grid-cols-1 md:grid-cols-[1fr_120px_140px_auto] gap-2 items-center text-xs bg-muted/40 rounded px-2 py-1.5">
+                                        <div className="min-w-0">
+                                          <code className="block truncate font-semibold">{c.name}</code>
+                                          {c.id_short && <code className="block text-[10px] text-muted-foreground truncate">ID: {c.id_short}</code>}
+                                        </div>
+                                        <code className="text-muted-foreground">{currentIp || "—"}</code>
+                                        <Input
+                                          className="h-7 text-xs"
+                                          placeholder={currentIp || "172.28.0.x"}
+                                          value={containerIpEdits[key] ?? ""}
+                                          onChange={(e) => setContainerIpEdits((prev) => ({ ...prev, [key]: e.target.value }))}
+                                        />
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs gap-1"
+                                          disabled={sshDeploying || !(containerIpEdits[key] || "").trim()}
+                                          onClick={() => handleApplyLiveContainerIp(d.name, c.id || c.name, c.name)}
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />Appliquer
+                                        </Button>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
