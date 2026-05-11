@@ -1,4 +1,4 @@
-import { Tv, Image, ListMusic, Clock, LayoutDashboard, LayoutGrid, Users, Building2, Settings, Palette, Key, Sparkles, Mail, AtSign, ClipboardList, BookOpen, BarChart3, DatabaseBackup, Activity, LogOut } from "lucide-react";
+import { Tv, Image, ListMusic, Clock, LayoutDashboard, LayoutGrid, Users, Building2, Settings, Palette, Key, Sparkles, Mail, AtSign, ClipboardList, BookOpen, BarChart3, DatabaseBackup, Activity, Wifi, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -54,6 +54,7 @@ const globalAdminItems = [
   { title: "Backup & Docker", url: "/admin/backup", icon: DatabaseBackup },
   { title: "État Serveur", url: "/admin/server-status", icon: Activity },
   { title: "Santé locale", url: "/admin/health", icon: Activity },
+  { title: "Réseau Docker", url: "/admin/docker-network", icon: Wifi },
 ];
 
 export function AppSidebar() {

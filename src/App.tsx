@@ -44,6 +44,7 @@ const Team = lazy(() => import("./pages/Team"));
 const AdminBackup = lazy(() => import("./pages/AdminBackup"));
 const AdminServerStatus = lazy(() => import("./pages/AdminServerStatus"));
 const AdminHealth = lazy(() => import("./pages/AdminHealth"));
+const AdminDockerNetwork = lazy(() => import("./pages/AdminDockerNetwork"));
 const FirstAdminLogin = lazy(() => import("./pages/FirstAdminLogin"));
 
 const queryClient = new QueryClient({
@@ -112,6 +113,7 @@ const App = () => (
                 <Route path="/admin/backup" element={<AdminBackup />} />
                 <Route path="/admin/server-status" element={<AdminServerStatus />} />
                 <Route path="/admin/health" element={<AdminHealth />} />
+                <Route path="/admin/docker-network" element={<AdminDockerNetwork />} />
                 <Route path="/setup" element={<ScreenSetup />} />
                 <Route path="/ai-assistant" element={<AIAssistant />} />
                 <Route path="/auto-flow" element={<AutoFlow />} />
