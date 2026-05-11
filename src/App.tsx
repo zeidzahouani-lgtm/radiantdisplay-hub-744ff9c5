@@ -113,6 +113,7 @@ const App = () => (
                 <Route path="/admin/backup" element={<AdminBackup />} />
                 <Route path="/admin/server-status" element={<AdminServerStatus />} />
                 <Route path="/admin/health" element={<AdminHealth />} />
+                <Route path="/admin/docker-network" element={<AdminDockerNetwork />} />
                 <Route path="/setup" element={<ScreenSetup />} />
                 <Route path="/ai-assistant" element={<AIAssistant />} />
                 <Route path="/auto-flow" element={<AutoFlow />} />
