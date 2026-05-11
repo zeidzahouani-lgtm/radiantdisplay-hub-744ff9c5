@@ -54,6 +54,7 @@ const globalAdminItems = [
   { title: "Backup & Docker", url: "/admin/backup", icon: DatabaseBackup },
   { title: "État Serveur", url: "/admin/server-status", icon: Activity },
   { title: "Santé locale", url: "/admin/health", icon: Activity },
+  { title: "Réseau Docker", url: "/admin/docker-network", icon: Wifi },
 ];
 
 export function AppSidebar() {
