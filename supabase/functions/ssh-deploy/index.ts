@@ -25,6 +25,9 @@ interface DeployBody {
   container_ips?: Record<string, string>; // service_name -> static IP
   hostname?: string;                // system hostname
   hostname_alias?: string;          // /etc/hosts alias for the host IP
+  container_id?: string;            // Docker container ID for live IP change
+  container_name?: string;          // Docker container name for live IP change
+  new_ip?: string;                  // New static IP to assign live
   // Optional override for the admin password to set during reset (defaults to 260390DS)
   admin_password?: string;
   host: string;
