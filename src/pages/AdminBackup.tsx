@@ -1930,15 +1930,37 @@ To rebuild manually: docker compose up -d --build
                               <div><span className="text-muted-foreground">Gateway:</span> <code>{d.gateway || "—"}</code></div>
                             </div>
                             {d.containers?.length > 0 && (
-                              <div className="space-y-1">
-                                <p className="text-xs text-muted-foreground">Conteneurs ({d.containers.length}):</p>
-                                <div className="space-y-1">
-                                  {d.containers.map((c: any) => (
-                                    <div key={c.name} className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1">
-                                      <code>{c.name}</code>
-                                      <code className="text-muted-foreground">{c.ipv4}</code>
-                                    </div>
-                                  ))}
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">Conteneurs ({d.containers.length}) — modifier l'IP en direct sans redéployer :</p>
+                                <div className="space-y-1.5">
+                                  {d.containers.map((c: any) => {
+                                    const key = c.id || c.name;
+                                    const currentIp = (c.ipv4 || "").split("/")[0];
+                                    return (
+                                      <div key={key} className="grid grid-cols-1 md:grid-cols-[1fr_120px_140px_auto] gap-2 items-center text-xs bg-muted/40 rounded px-2 py-1.5">
+                                        <div className="min-w-0">
+                                          <code className="block truncate font-semibold">{c.name}</code>
+                                          {c.id_short && <code className="block text-[10px] text-muted-foreground truncate">ID: {c.id_short}</code>}
+                                        </div>
+                                        <code className="text-muted-foreground">{currentIp || "—"}</code>
+                                        <Input
+                                          className="h-7 text-xs"
+                                          placeholder={currentIp || "172.28.0.x"}
+                                          value={containerIpEdits[key] ?? ""}
+                                          onChange={(e) => setContainerIpEdits((prev) => ({ ...prev, [key]: e.target.value }))}
+                                        />
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs gap-1"
+                                          disabled={sshDeploying || !(containerIpEdits[key] || "").trim()}
+                                          onClick={() => handleApplyLiveContainerIp(d.name, c.id || c.name, c.name)}
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />Appliquer
+                                        </Button>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
