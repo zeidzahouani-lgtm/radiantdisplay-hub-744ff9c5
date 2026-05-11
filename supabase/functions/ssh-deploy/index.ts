@@ -1162,6 +1162,8 @@ async function runDeploymentJob(
       directResult = await runNetworkSetHostname(body, log);
     } else if (body.action === "network_get_config") {
       directResult = await runNetworkGetConfig(body, log);
+    } else if (body.action === "network_set_container_ip") {
+      directResult = await runNetworkSetContainerIp(body, log);
     } else {
       await runDeployment(body, log);
     }
