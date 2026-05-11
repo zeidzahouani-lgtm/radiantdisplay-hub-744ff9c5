@@ -1884,6 +1884,36 @@ To rebuild manually: docker compose up -d --build
                 </Button>
               </div>
 
+              <Separator />
+
+              {/* ===== Live IP change by container ID ===== */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><Container className="h-4 w-4" />Modifier l'IP d'un conteneur en direct</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Applique l'IP immédiatement via <code>docker network disconnect/connect</code> sans redémarrer la stack ni redéployer. Utilisez l'ID Docker (12 caractères) ou le nom exact du conteneur.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="manual-net">Réseau Docker</Label>
+                    <Input id="manual-net" value={manualNetName} onChange={(e) => setManualNetName(e.target.value)} placeholder="screenflow_default" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="manual-cid">ID ou nom du conteneur</Label>
+                    <Input id="manual-cid" value={manualCid} onChange={(e) => setManualCid(e.target.value)} placeholder="ex: a1b2c3d4e5f6 ou screenflow-web" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="manual-ip">Nouvelle IP</Label>
+                    <Input id="manual-ip" value={manualNewIp} onChange={(e) => setManualNewIp(e.target.value)} placeholder="172.28.0.42" />
+                  </div>
+                </div>
+                <Button onClick={handleManualContainerIp} disabled={sshDeploying || !manualCid.trim() || !manualNewIp.trim()} className="gap-2">
+                  {sshDeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Appliquer l'IP en direct
+                </Button>
+              </div>
+
               {networkConfig && (
                 <>
                   <Separator />
