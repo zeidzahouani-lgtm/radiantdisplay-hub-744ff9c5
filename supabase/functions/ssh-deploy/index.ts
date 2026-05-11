@@ -2748,7 +2748,9 @@ async function runNetworkInspect(body: DeployBody, log: (m: string) => Promise<v
       try {
         const parsed = JSON.parse(insp.stdout.trim());
         const ipam = parsed.IPAM?.Config?.[0] || {};
-        const containers = Object.values(parsed.Containers || {}).map((c: any) => ({
+        const containers = Object.entries(parsed.Containers || {}).map(([cid, c]: [string, any]) => ({
+          id: cid,
+          id_short: String(cid).substring(0, 12),
           name: c.Name,
           ipv4: c.IPv4Address,
           mac: c.MacAddress,
